@@ -36,6 +36,8 @@ import { CryptographicAuditLedger } from './components/advanced/CryptographicAud
 import { EmergencyCodeDispatcher } from './components/advanced/EmergencyCodeDispatcher';
 import { OrganTransplantRegistry } from './components/advanced/OrganTransplantRegistry';
 import { TelemedicineSuite } from './components/advanced/TelemedicineSuite';
+import { AICopilotView } from './components/advanced/AICopilotView';
+import { FloatingAICopilot } from './components/common/FloatingAICopilot';
 
 const MainLayout: React.FC = () => {
   const { activeTab, currentRole } = useHospital();
@@ -137,7 +139,9 @@ const MainLayout: React.FC = () => {
       case 'core-prescription':
         return <DigitalPrescriptionPad />;
 
-      // 10 Cutting-Edge Features
+      // 11 Cutting-Edge Features
+      case 'adv-ai-copilot':
+        return <AICopilotView />;
       case 'adv-cdss':
         return <CDSSDrugInteractionChecker />;
       case 'adv-mews':
@@ -188,6 +192,7 @@ const MainLayout: React.FC = () => {
         onClose={() => setIsPersonaModalOpen(false)}
       />
 
+      <FloatingAICopilot />
       <NotificationToast />
     </div>
   );

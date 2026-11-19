@@ -23,7 +23,8 @@ import {
   Dna,
   Video,
   BarChart3,
-  User
+  User,
+  Bot
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -47,16 +48,17 @@ export const Sidebar: React.FC<SidebarProps> = () => {
   ];
 
   const advancedNavItems = [
-    { id: 'adv-cdss', label: '1. AI CDSS & Drug Interaction', icon: BrainCircuit, badge: 'AI' },
-    { id: 'adv-mews', label: '2. MEWS Early Warning Score', icon: Activity, badge: 'Clinical' },
-    { id: 'adv-triage', label: '3. Smart AI Triage Assistant', icon: HeartPulse, badge: 'AI' },
-    { id: 'adv-floorplan', label: '4. Spatial Ward Floor Plan', icon: MapPin, badge: 'Visual' },
-    { id: 'adv-bloodbank', label: '5. Blood Bank & Plasma Match', icon: Droplet, badge: 'Critical' },
-    { id: 'adv-scribe', label: '6. Ambient AI Clinical Scribe', icon: Mic, badge: 'AI' },
-    { id: 'adv-audit', label: '7. Cryptographic PHI Ledger', icon: Lock, badge: 'Security' },
-    { id: 'adv-code-dispatcher', label: '8. Code Blue & Disaster Dispatch', icon: Radio, badge: 'Protocol' },
-    { id: 'adv-organ-match', label: '9. Organ Transplant Registry', icon: Dna, badge: 'Algorithmic' },
-    { id: 'adv-telemedicine', label: '10. Telemedicine Exam Suite', icon: Video, badge: 'Virtual' },
+    { id: 'adv-ai-copilot', label: '1. PulseAI Omniscient Copilot', icon: Bot, badge: 'Omniscient' },
+    { id: 'adv-cdss', label: '2. AI CDSS & Drug Interaction', icon: BrainCircuit, badge: 'AI' },
+    { id: 'adv-mews', label: '3. MEWS Early Warning Score', icon: Activity, badge: 'Clinical' },
+    { id: 'adv-triage', label: '4. Smart AI Triage Assistant', icon: HeartPulse, badge: 'AI' },
+    { id: 'adv-floorplan', label: '5. Spatial Ward Floor Plan', icon: MapPin, badge: 'Visual' },
+    { id: 'adv-bloodbank', label: '6. Blood Bank & Plasma Match', icon: Droplet, badge: 'Critical' },
+    { id: 'adv-scribe', label: '7. Ambient AI Clinical Scribe', icon: Mic, badge: 'AI' },
+    { id: 'adv-audit', label: '8. Cryptographic PHI Ledger', icon: Lock, badge: 'Security' },
+    { id: 'adv-code-dispatcher', label: '9. Code Blue & Disaster Dispatch', icon: Radio, badge: 'Protocol' },
+    { id: 'adv-organ-match', label: '10. Organ Transplant Registry', icon: Dna, badge: 'Algorithmic' },
+    { id: 'adv-telemedicine', label: '11. Telemedicine Exam Suite', icon: Video, badge: 'Virtual' },
   ];
 
   return (
@@ -106,14 +108,14 @@ export const Sidebar: React.FC<SidebarProps> = () => {
           </div>
         </div>
 
-        {/* 10 Unique & Advanced Features Section */}
+        {/* 11 Unique & Advanced Features Section */}
         <div>
           <div className="flex items-center justify-between px-3 pb-2">
             <span className="text-[10px] font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400">
-              10 Advanced & AI Features
+              11 Advanced & AI Features
             </span>
             <span className="rounded bg-teal-100 px-1 py-0.5 text-[9px] font-bold text-teal-700 dark:bg-teal-900/60 dark:text-teal-300">
-              10/10
+              11/11
             </span>
           </div>
           <div className="space-y-1">
@@ -135,7 +137,9 @@ export const Sidebar: React.FC<SidebarProps> = () => {
                     <span className="truncate">{item.label}</span>
                   </div>
                   <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold ${
-                    item.badge === 'AI' 
+                    item.badge === 'Omniscient'
+                      ? 'bg-gradient-to-r from-teal-500 to-indigo-600 text-white shadow-xs'
+                      : item.badge === 'AI' 
                       ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
                       : item.badge === 'Critical'
                       ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
