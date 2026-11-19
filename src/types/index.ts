@@ -11,10 +11,13 @@ export interface UserProfile {
   id: string;
   name: string;
   role: UserRole;
+  title?: string;
   email: string;
   avatar: string;
   department?: string;
   licenseNumber?: string;
+  permissions?: string[];
+  isSystemDefault?: boolean;
 }
 
 // ----------------- Core Feature 1: Patients & EHR -----------------

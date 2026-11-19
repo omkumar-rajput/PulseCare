@@ -16,16 +16,87 @@ import {
   X,
   ShieldAlert,
   ChevronRight,
-  Droplet
+  Droplet,
+  Edit,
+  Save
 } from 'lucide-react';
 
 export const PatientRegistry: React.FC = () => {
-  const { patients, addPatient, updatePatientVitals, doctors, beds } = useHospital();
+  const { patients, addPatient, editPatient, updatePatientVitals, currentRole, doctors, beds } = useHospital();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [selectedPatient, setSelectedPatient] = useState<Patient>(patients[0] || null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showVitalsModal, setShowVitalsModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+
+  // Edit Patient Form State
+  const [editFormData, setEditFormData] = useState<{
+    name: string;
+    age: number;
+    gender: Patient['gender'];
+    bloodGroup: Patient['bloodGroup'];
+    phone: string;
+    allergies: string;
+    chronicConditions: string;
+    admissionStatus: Patient['admissionStatus'];
+  }>({
+    name: '',
+    age: 0,
+    gender: 'Male',
+    bloodGroup: 'O+',
+    phone: '',
+    allergies: '',
+    chronicConditions: '',
+    admissionStatus: 'Outpatient',
+  });
+
+  const openEditModal = () => {
+    if (!selectedPatient) return;
+    setEditFormData({
+      name: selectedPatient.name,
+      age: selectedPatient.age,
+      gender: selectedPatient.gender,
+      bloodGroup: selectedPatient.bloodGroup,
+      phone: selectedPatient.phone,
+      allergies: selectedPatient.allergies.join(', '),
+      chronicConditions: selectedPatient.chronicConditions.join(', '),
+      admissionStatus: selectedPatient.admissionStatus,
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatient) return;
+
+    await editPatient(selectedPatient.id, {
+      name: editFormData.name,
+      age: editFormData.age,
+      gender: editFormData.gender,
+      bloodGroup: editFormData.bloodGroup,
+      phone: editFormData.phone,
+      allergies: editFormData.allergies ? editFormData.allergies.split(',').map((s) => s.trim()) : [],
+      chronicConditions: editFormData.chronicConditions ? editFormData.chronicConditions.split(',').map((s) => s.trim()) : [],
+      admissionStatus: editFormData.admissionStatus,
+    });
+
+    setSelectedPatient((prev) =>
+      prev ? {
+        ...prev,
+        name: editFormData.name,
+        age: editFormData.age,
+        gender: editFormData.gender,
+        bloodGroup: editFormData.bloodGroup,
+        phone: editFormData.phone,
+        allergies: editFormData.allergies ? editFormData.allergies.split(',').map((s) => s.trim()) : [],
+        chronicConditions: editFormData.chronicConditions ? editFormData.chronicConditions.split(',').map((s) => s.trim()) : [],
+        admissionStatus: editFormData.admissionStatus,
+      } : prev
+    );
+
+    setShowEditModal(false);
+  };
 
   // Add Patient Form State
   const [newPatient, setNewPatient] = useState({
@@ -62,9 +133,9 @@ export const PatientRegistry: React.FC = () => {
     return matchesSearch && matchesFilter;
   });
 
-  const handleCreatePatient = (e: React.FormEvent) => {
+  const handleCreatePatient = async (e: React.FormEvent) => {
     e.preventDefault();
-    const created = addPatient({
+    const created = await addPatient({
       ...newPatient,
       allergies: newPatient.allergies ? newPatient.allergies.split(',').map((s) => s.trim()) : [],
       chronicConditions: newPatient.chronicConditions ? newPatient.chronicConditions.split(',').map((s) => s.trim()) : [],
@@ -210,13 +281,25 @@ export const PatientRegistry: React.FC = () => {
                   </p>
                 </div>
 
-                <button
-                  onClick={() => setShowVitalsModal(true)}
-                  className="flex items-center gap-1.5 rounded-xl border border-teal-500/30 bg-teal-50 px-3 py-1.5 text-xs font-bold text-teal-700 hover:bg-teal-100 dark:bg-teal-950/50 dark:text-teal-300"
-                >
-                  <Activity className="h-3.5 w-3.5" />
-                  <span>Record Telemetry Vitals</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  {(currentRole === 'admin' || currentRole === 'doctor') && (
+                    <button
+                      onClick={openEditModal}
+                      className="flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    >
+                      <Edit className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                      <span>Edit Patient (Admin)</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => setShowVitalsModal(true)}
+                    className="flex items-center gap-1.5 rounded-xl border border-teal-500/30 bg-teal-50 px-3 py-1.5 text-xs font-bold text-teal-700 hover:bg-teal-100 dark:bg-teal-950/50 dark:text-teal-300"
+                  >
+                    <Activity className="h-3.5 w-3.5" />
+                    <span>Record Telemetry Vitals</span>
+                  </button>
+                </div>
               </div>
 
               {/* Patient Quick Info Pills */}
@@ -621,6 +704,139 @@ export const PatientRegistry: React.FC = () => {
                   className="rounded-xl bg-teal-600 px-5 py-2 text-xs font-bold text-white shadow hover:bg-teal-700"
                 >
                   Save Telemetry
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Modal: Edit Patient Record (Admin) */}
+      {showEditModal && selectedPatient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 max-h-[90vh] overflow-y-auto animate-fade-in">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Admin Edit: {selectedPatient.name}</h3>
+                <p className="text-xs text-teal-600 font-mono font-semibold">{selectedPatient.uhid}</p>
+              </div>
+              <button onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="mt-4 space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Patient Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.name}
+                  onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Age</label>
+                  <input
+                    type="number"
+                    value={editFormData.age}
+                    onChange={(e) => setEditFormData({ ...editFormData, age: parseInt(e.target.value) || 0 })}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Gender</label>
+                  <select
+                    value={editFormData.gender}
+                    onChange={(e) => setEditFormData({ ...editFormData, gender: e.target.value as any })}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Blood Group</label>
+                  <select
+                    value={editFormData.bloodGroup}
+                    onChange={(e) => setEditFormData({ ...editFormData, bloodGroup: e.target.value as any })}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+                  >
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Phone</label>
+                  <input
+                    type="text"
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Admission Status</label>
+                  <select
+                    value={editFormData.admissionStatus}
+                    onChange={(e) => setEditFormData({ ...editFormData, admissionStatus: e.target.value as any })}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+                  >
+                    <option value="Inpatient">Inpatient</option>
+                    <option value="Outpatient">Outpatient</option>
+                    <option value="Emergency">Emergency</option>
+                    <option value="Discharged">Discharged</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Allergies (comma separated)</label>
+                <input
+                  type="text"
+                  value={editFormData.allergies}
+                  onChange={(e) => setEditFormData({ ...editFormData, allergies: e.target.value })}
+                  placeholder="e.g. Penicillin, Sulfa"
+                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Chronic Conditions (comma separated)</label>
+                <input
+                  type="text"
+                  value={editFormData.chronicConditions}
+                  onChange={(e) => setEditFormData({ ...editFormData, chronicConditions: e.target.value })}
+                  placeholder="e.g. Hypertension, Type 2 Diabetes"
+                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-teal-600 px-5 py-2 text-xs font-bold text-white shadow hover:bg-teal-700"
+                >
+                  Save Changes to Database
                 </button>
               </div>
             </form>

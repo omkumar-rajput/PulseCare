@@ -3,7 +3,10 @@ import { HospitalProvider, useHospital } from './context/HospitalContext';
 import { Navbar } from './components/common/Navbar';
 import { Sidebar } from './components/common/Sidebar';
 import { RoleSwitcherModal } from './components/common/RoleSwitcherModal';
+import { PersonaManagementModal } from './components/common/PersonaManagementModal';
 import { NotificationToast } from './components/common/NotificationToast';
+import { AccessDeniedGate } from './components/common/AccessDeniedGate';
+import { UserRole } from './types';
 
 // Dashboards
 import { OverviewDashboard } from './components/dashboards/OverviewDashboard';
@@ -35,10 +38,74 @@ import { OrganTransplantRegistry } from './components/advanced/OrganTransplantRe
 import { TelemedicineSuite } from './components/advanced/TelemedicineSuite';
 
 const MainLayout: React.FC = () => {
-  const { activeTab } = useHospital();
+  const { activeTab, currentRole } = useHospital();
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
+
+  // Security Gate Rule Check
+  const checkAccessPermission = (): { hasAccess: boolean; requiredTitle: string; allowed: UserRole[] } => {
+    // 1. Patient Role Restrictions: Patients can only view their self-service portal & personal appointments
+    if (currentRole === 'patient') {
+      const patientAllowedTabs = ['patient-portal', 'core-appointments'];
+      if (!patientAllowedTabs.includes(activeTab)) {
+        return {
+          hasAccess: false,
+          requiredTitle: 'Clinical & Administrative Protected Area',
+          allowed: ['admin', 'doctor', 'nurse', 'pharmacist', 'lab_technician', 'receptionist'],
+        };
+      }
+    }
+
+    // 2. Doctor Prescription & CDSS: restricted to Doctor & Admin
+    if (activeTab === 'core-prescription' || activeTab === 'adv-cdss') {
+      if (currentRole !== 'admin' && currentRole !== 'doctor') {
+        return {
+          hasAccess: false,
+          requiredTitle: 'Licensed Prescribing Physician Authorization',
+          allowed: ['doctor', 'admin'],
+        };
+      }
+    }
+
+    // 3. Cryptographic Audit Ledger: restricted to Admin & Compliance Officers
+    if (activeTab === 'adv-audit') {
+      if (currentRole !== 'admin') {
+        return {
+          hasAccess: false,
+          requiredTitle: 'Chief Compliance & Information Security Officer (CISO)',
+          allowed: ['admin'],
+        };
+      }
+    }
+
+    // 4. Emergency Code Blue Dispatch: restricted to clinical & administrative staff (not patient)
+    if (activeTab === 'adv-code-dispatcher') {
+      if (currentRole === 'patient') {
+        return {
+          hasAccess: false,
+          requiredTitle: 'Hospital Resuscitation & Emergency Operations Command',
+          allowed: ['admin', 'doctor', 'nurse'],
+        };
+      }
+    }
+
+    return { hasAccess: true, requiredTitle: '', allowed: [] };
+  };
+
+  const accessCheck = checkAccessPermission();
 
   const renderActiveView = () => {
+    // Enforce Security Gate if unauthorized
+    if (!accessCheck.hasAccess) {
+      return (
+        <AccessDeniedGate
+          requiredRoleName={accessCheck.requiredTitle}
+          allowedRoles={accessCheck.allowed}
+          onOpenRoleModal={() => setIsRoleModalOpen(true)}
+        />
+      );
+    }
+
     switch (activeTab) {
       // Dashboards
       case 'dashboard':
@@ -99,7 +166,10 @@ const MainLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col">
-      <Navbar onOpenRoleModal={() => setIsRoleModalOpen(true)} />
+      <Navbar
+        onOpenRoleModal={() => setIsRoleModalOpen(true)}
+        onOpenPersonaModal={() => setIsPersonaModalOpen(true)}
+      />
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
@@ -111,6 +181,11 @@ const MainLayout: React.FC = () => {
       <RoleSwitcherModal
         isOpen={isRoleModalOpen}
         onClose={() => setIsRoleModalOpen(false)}
+      />
+
+      <PersonaManagementModal
+        isOpen={isPersonaModalOpen}
+        onClose={() => setIsPersonaModalOpen(false)}
       />
 
       <NotificationToast />

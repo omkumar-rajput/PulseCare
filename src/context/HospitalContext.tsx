@@ -45,15 +45,105 @@ export interface ToastNotification {
   timestamp: string;
 }
 
+const DEFAULT_PERSONAS: UserProfile[] = [
+  {
+    id: 'ADM-01',
+    name: 'Arthur Vance, MHA',
+    role: 'admin',
+    title: 'Hospital Administrator / Chief of Operations',
+    email: 'admin.vance@pulsecare.health',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250',
+    department: 'Hospital Administration & Executive Operations',
+    permissions: ['ALL_ACCESS', 'EDIT_PATIENTS', 'EDIT_BILLING', 'EDIT_BEDS', 'MANAGE_PERSONAS', 'DISPATCH_CODE'],
+    isSystemDefault: true,
+  },
+  {
+    id: 'DOC-01',
+    name: 'Dr. Sarah Lin, MD, FACC',
+    role: 'doctor',
+    title: 'Senior Interventional Cardiologist',
+    email: 'sarah.lin@pulsecare.health',
+    avatar: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=250',
+    department: 'Cardiovascular Sciences',
+    licenseNumber: 'MD-88392-CAR',
+    permissions: ['WRITE_PRESCRIPTION', 'VIEW_EHR', 'ORDER_LABS', 'CDSS_ACCESS', 'TELEMEDICINE'],
+    isSystemDefault: true,
+  },
+  {
+    id: 'NUR-01',
+    name: 'Nurse Clara Hughes, BSN, RN',
+    role: 'nurse',
+    title: 'Head Nurse - Intensive Care Unit',
+    email: 'clara.hughes@pulsecare.health',
+    avatar: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?auto=format&fit=crop&q=80&w=250',
+    department: 'Intensive Care Unit (ICU)',
+    licenseNumber: 'RN-55410-ICU',
+    permissions: ['LOG_VITALS', 'MEWS_MONITOR', 'BED_SANITIZATION', 'ER_INTAKE'],
+    isSystemDefault: true,
+  },
+  {
+    id: 'PHARM-01',
+    name: 'Robert Tanaka, PharmD',
+    role: 'pharmacist',
+    title: 'Chief Clinical Pharmacist',
+    email: 'robert.tanaka@pulsecare.health',
+    avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=250',
+    department: 'Clinical Pharmacology & Dispensing',
+    licenseNumber: 'RPH-19042',
+    permissions: ['DISPENSE_DRUGS', 'MANAGE_INVENTORY', 'DDI_REVIEW'],
+    isSystemDefault: true,
+  },
+  {
+    id: 'LAB-01',
+    name: 'Chen Wei, MLS (ASCP)',
+    role: 'lab_technician',
+    title: 'Laboratory Diagnostic Specialist',
+    email: 'chen.wei@pulsecare.health',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
+    department: 'Pathology & Molecular Diagnostics',
+    licenseNumber: 'MLS-77209',
+    permissions: ['RUN_ASSAYS', 'VALIDATE_RESULTS', 'UPLOAD_REPORTS'],
+    isSystemDefault: true,
+  },
+  {
+    id: 'REC-01',
+    name: 'Jessica Gomez',
+    role: 'receptionist',
+    title: 'Front Desk & Patient Admissions',
+    email: 'jessica.gomez@pulsecare.health',
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=250',
+    department: 'Patient Admissions & Front Desk',
+    permissions: ['REGISTER_PATIENTS', 'SCHEDULE_OPD', 'ISSUE_TOKENS'],
+    isSystemDefault: true,
+  },
+  {
+    id: 'PAT-101',
+    name: 'Eleanor Harrison',
+    role: 'patient',
+    title: 'Verified Inpatient Portal',
+    email: 'eleanor.harrison@email.com',
+    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=250',
+    department: 'Patient Portal',
+    permissions: ['VIEW_OWN_EHR', 'VIEW_OWN_BILLS', 'BOOK_OWN_OPD'],
+    isSystemDefault: true,
+  }
+];
+
 interface HospitalContextType {
-  // Authentication & Active Role
+  // Authentication & Personas
   currentUser: UserProfile;
   currentRole: UserRole;
   setCurrentRole: (role: UserRole) => void;
+  personas: UserProfile[];
+  addPersona: (data: Omit<UserProfile, 'id'>) => Promise<UserProfile>;
+  deletePersona: (id: string) => Promise<boolean>;
+
+  // Navigation & Preferences
   activeTab: string;
   setActiveTab: (tab: string) => void;
   darkMode: boolean;
   setDarkMode: (val: boolean) => void;
+  liveSyncActive: boolean;
 
   // Core Data
   patients: Patient[];
@@ -79,18 +169,22 @@ interface HospitalContextType {
   addNotification: (type: ToastNotification['type'], title: string, message: string) => void;
   dismissNotification: (id: string) => void;
 
-  // Actions
-  addPatient: (patient: Omit<Patient, 'id' | 'uhid' | 'vitalsHistory' | 'medicalTimeline'>) => Patient;
+  // Actions & Full Admin Editing
+  addPatient: (patient: Omit<Patient, 'id' | 'uhid' | 'vitalsHistory' | 'medicalTimeline'>) => Promise<Patient>;
+  editPatient: (patientId: string, updates: Partial<Patient>) => Promise<void>;
   updatePatientVitals: (patientId: string, vitals: Omit<VitalRecord, 'id' | 'timestamp'>) => void;
   assignBedToPatient: (bedId: string, patientId: string) => void;
   dischargeBed: (bedId: string) => void;
+  editBed: (bedId: string, updates: Partial<Bed>) => Promise<void>;
   bookAppointment: (appointment: Omit<Appointment, 'id' | 'tokenNumber' | 'createdDate'>) => void;
   updateAppointmentStatus: (appointmentId: string, status: Appointment['status']) => void;
   dispenseMedicine: (medicineId: string, quantity: number) => boolean;
   addMedicine: (medicine: Omit<Medicine, 'id'>) => void;
+  editMedicine: (medicineId: string, updates: Partial<Medicine>) => Promise<void>;
   createLabOrder: (order: Omit<LabTestOrder, 'id' | 'orderNumber' | 'orderDate'>) => void;
   updateLabStatus: (orderId: string, status: LabTestOrder['status'], findingsNotes?: string) => void;
   createInvoice: (invoice: Omit<Invoice, 'id' | 'invoiceNumber' | 'billingDate'>) => Invoice;
+  editInvoice: (invoiceId: string, updates: Partial<Invoice>) => Promise<void>;
   recordAuditLog: (
     action: AuditBlock['action'],
     resourceId: string,
@@ -106,82 +200,27 @@ interface HospitalContextType {
 
 const HospitalContext = createContext<HospitalContextType | undefined>(undefined);
 
-const ROLE_PROFILES: Record<UserRole, UserProfile> = {
-  admin: {
-    id: 'ADM-01',
-    name: 'Arthur Vance, MHA',
-    role: 'admin',
-    email: 'admin.vance@pulsecare.health',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250',
-    department: 'Hospital Administration & Executive Operations',
-  },
-  doctor: {
-    id: 'DOC-01',
-    name: 'Dr. Sarah Lin, MD, FACC',
-    role: 'doctor',
-    email: 'sarah.lin@pulsecare.health',
-    avatar: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=250',
-    department: 'Cardiovascular Sciences',
-    licenseNumber: 'MD-88392-CAR',
-  },
-  nurse: {
-    id: 'NUR-01',
-    name: 'Nurse Clara Hughes, BSN, RN',
-    role: 'nurse',
-    email: 'clara.hughes@pulsecare.health',
-    avatar: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?auto=format&fit=crop&q=80&w=250',
-    department: 'Intensive Care Unit (ICU)',
-    licenseNumber: 'RN-55410-ICU',
-  },
-  pharmacist: {
-    id: 'PHARM-01',
-    name: 'Robert Tanaka, PharmD',
-    role: 'pharmacist',
-    email: 'robert.tanaka@pulsecare.health',
-    avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=250',
-    department: 'Clinical Pharmacology & Dispensing',
-    licenseNumber: 'RPH-19042',
-  },
-  lab_technician: {
-    id: 'LAB-01',
-    name: 'Chen Wei, MLS (ASCP)',
-    role: 'lab_technician',
-    email: 'chen.wei@pulsecare.health',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
-    department: 'Pathology & Molecular Diagnostics',
-    licenseNumber: 'MLS-77209',
-  },
-  receptionist: {
-    id: 'REC-01',
-    name: 'Jessica Gomez',
-    role: 'receptionist',
-    email: 'jessica.gomez@pulsecare.health',
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=250',
-    department: 'Patient Admissions & Front Desk',
-  },
-  patient: {
-    id: 'PAT-101',
-    name: 'Eleanor Harrison',
-    role: 'patient',
-    email: 'eleanor.harrison@email.com',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=250',
-  }
-};
-
 export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentRole, setCurrentRole] = useState<UserRole>('admin');
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [liveSyncActive, setLiveSyncActive] = useState<boolean>(true);
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
-  // State with LocalStorage fallback
+  // Personas List (Persisted across sessions)
+  const [personas, setPersonas] = useState<UserProfile[]>(() => {
+    const saved = localStorage.getItem('pc_personas');
+    return saved ? JSON.parse(saved) : DEFAULT_PERSONAS;
+  });
+
+  // State with LocalStorage & Initial Fallbacks
   const [patients, setPatients] = useState<Patient[]>(() => {
     const saved = localStorage.getItem('pc_patients');
     return saved ? JSON.parse(saved) : INITIAL_PATIENTS;
   });
 
-  const [doctors] = useState<Doctor[]>(INITIAL_DOCTORS);
+  const [doctors, setDoctors] = useState<Doctor[]>(INITIAL_DOCTORS);
 
   const [beds, setBeds] = useState<Bed[]>(() => {
     const saved = localStorage.getItem('pc_beds');
@@ -218,7 +257,10 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [notifications, setNotifications] = useState<ToastNotification[]>([]);
 
-  // Apply dark mode class to html element
+  // Find active profile
+  const currentUser = personas.find((p) => p.role === currentRole) || personas[0];
+
+  // Dark mode HTML class
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
@@ -227,7 +269,11 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [darkMode]);
 
-  // Persist important data to localStorage
+  // Save to LocalStorage permanently
+  useEffect(() => {
+    localStorage.setItem('pc_personas', JSON.stringify(personas));
+  }, [personas]);
+
   useEffect(() => {
     localStorage.setItem('pc_patients', JSON.stringify(patients));
   }, [patients]);
@@ -252,6 +298,48 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.setItem('pc_appointments', JSON.stringify(appointments));
   }, [appointments]);
 
+  // -------------------------------------------------------------
+  // CONTINUOUS LIVE-SYNC AUTO-POLLING ENGINE (EVERY 3 SECONDS)
+  // -------------------------------------------------------------
+  useEffect(() => {
+    let isSubscribed = true;
+
+    const syncLiveState = async () => {
+      try {
+        const response = await fetch('/api/sync/live-state');
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!isSubscribed) return;
+
+        setLiveSyncActive(true);
+
+        if (data.personas && data.personas.length > 0) setPersonas(data.personas);
+        if (data.patients && data.patients.length > 0) setPatients(data.patients);
+        if (data.beds && data.beds.length > 0) setBeds(data.beds);
+        if (data.medicines && data.medicines.length > 0) setMedicines(data.medicines);
+        if (data.invoices && data.invoices.length > 0) setInvoices(data.invoices);
+        if (data.appointments && data.appointments.length > 0) setAppointments(data.appointments);
+        if (data.bloodBank && data.bloodBank.length > 0) setBloodBank(data.bloodBank);
+        if (data.emergencyBroadcasts && data.emergencyBroadcasts.length > 0) {
+          setEmergencyBroadcasts(data.emergencyBroadcasts);
+        }
+      } catch (err) {
+        // Fallback to local storage gracefully if server not reachable
+        setLiveSyncActive(false);
+      }
+    };
+
+    // Initial sync
+    syncLiveState();
+
+    // Auto-poll continuously every 3.5 seconds
+    const interval = setInterval(syncLiveState, 3500);
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   const addNotification = (type: ToastNotification['type'], title: string, message: string) => {
     const newNotif: ToastNotification = {
       id: 'NOTIF-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
@@ -262,7 +350,6 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
     setNotifications((prev) => [newNotif, ...prev.slice(0, 5)]);
 
-    // Auto dismiss after 6 seconds
     setTimeout(() => {
       dismissNotification(newNotif.id);
     }, 6000);
@@ -278,12 +365,11 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     resourceType: AuditBlock['resourceType'],
     details: string
   ) => {
-    const user = ROLE_PROFILES[currentRole];
     const prevBlock = auditLedger.length > 0 ? auditLedger[auditLedger.length - 1] : null;
     const newBlock = await createAuditBlock(
       prevBlock,
-      user.id,
-      user.name,
+      currentUser.id,
+      currentUser.name,
       currentRole,
       action,
       resourceId,
@@ -293,7 +379,54 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setAuditLedger((prev) => [...prev, newBlock]);
   };
 
-  const addPatient = (patientData: Omit<Patient, 'id' | 'uhid' | 'vitalsHistory' | 'medicalTimeline'>): Patient => {
+  // -------------------------------------------------------------
+  // PERSONA ACTIONS (ADD / DELETE)
+  // -------------------------------------------------------------
+  const addPersona = async (data: Omit<UserProfile, 'id'>): Promise<UserProfile> => {
+    const newId = `PER-${Date.now().toString().slice(-4)}`;
+    const created: UserProfile = { ...data, id: newId, isSystemDefault: false };
+
+    try {
+      await fetch('/api/personas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(created),
+      });
+    } catch (e) {
+      // offline fallback
+    }
+
+    setPersonas((prev) => [...prev, created]);
+    recordAuditLog('UPDATE_EHR', created.id, 'Patient', `Created new clinical persona: ${created.name} (${created.role})`);
+    addNotification('success', 'Persona Created', `${created.name} (${created.title}) added to staff roster.`);
+    return created;
+  };
+
+  const deletePersona = async (id: string): Promise<boolean> => {
+    const target = personas.find((p) => p.id === id);
+    if (!target) return false;
+
+    if (target.id === 'ADM-01') {
+      addNotification('critical', 'Action Blocked', 'Primary Root Administrator cannot be deleted.');
+      return false;
+    }
+
+    try {
+      await fetch(`/api/personas/${id}`, { method: 'DELETE' });
+    } catch (e) {
+      // offline fallback
+    }
+
+    setPersonas((prev) => prev.filter((p) => p.id !== id));
+    recordAuditLog('UPDATE_EHR', id, 'Patient', `Deleted persona: ${target.name} (${target.role})`);
+    addNotification('info', 'Persona Deleted', `${target.name} removed from hospital roster.`);
+    return true;
+  };
+
+  // -------------------------------------------------------------
+  // PATIENT ACTIONS (ADD / FULL ADMIN EDIT)
+  // -------------------------------------------------------------
+  const addPatient = async (patientData: Omit<Patient, 'id' | 'uhid' | 'vitalsHistory' | 'medicalTimeline'>): Promise<Patient> => {
     const newId = `PAT-${Date.now().toString().slice(-4)}`;
     const uhid = `PC-2026-${Math.floor(1000 + Math.random() * 9000)}`;
     const newPatient: Patient = {
@@ -319,16 +452,41 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           date: new Date().toISOString().split('T')[0],
           title: 'Patient Intake & Registration',
           type: 'admission',
-          notes: 'Registered in PulseCare HMS via front desk admission portal.',
-          doctorName: ROLE_PROFILES[currentRole].name,
+          notes: 'Registered in PulseCare HMS via Admissions Portal.',
+          doctorName: currentUser.name,
         }
       ],
     };
+
+    try {
+      await fetch('/api/patients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newPatient),
+      });
+    } catch (e) {}
 
     setPatients((prev) => [newPatient, ...prev]);
     recordAuditLog('UPDATE_EHR', newPatient.id, 'Patient', `Registered new patient ${newPatient.name} (UHID: ${uhid})`);
     addNotification('success', 'Patient Registered', `UHID ${uhid} created for ${newPatient.name}`);
     return newPatient;
+  };
+
+  // Full Admin Edit of Patient
+  const editPatient = async (patientId: string, updates: Partial<Patient>): Promise<void> => {
+    try {
+      await fetch(`/api/patients/${patientId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+    } catch (e) {}
+
+    setPatients((prev) =>
+      prev.map((p) => (p.id === patientId ? { ...p, ...updates } : p))
+    );
+    recordAuditLog('UPDATE_EHR', patientId, 'Patient', `Admin updated clinical fields for patient ID ${patientId}`);
+    addNotification('success', 'Patient Record Saved', `Patient data updated and synchronized.`);
   };
 
   const updatePatientVitals = (patientId: string, vitals: Omit<VitalRecord, 'id' | 'timestamp'>) => {
@@ -350,7 +508,15 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       })
     );
 
-    recordAuditLog('UPDATE_EHR', patientId, 'Patient', `Updated vital telemetry: HR ${vitals.heartRate}, BP ${vitals.systolicBp}/${vitals.diastolicBp}, SpO2 ${vitals.spO2}%`);
+    try {
+      fetch(`/api/patients/${patientId}/vitals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(vitals),
+      });
+    } catch (e) {}
+
+    recordAuditLog('UPDATE_EHR', patientId, 'Patient', `Logged vitals: HR ${vitals.heartRate}, BP ${vitals.systolicBp}/${vitals.diastolicBp}, SpO2 ${vitals.spO2}%`);
     addNotification('info', 'Vitals Recorded', `Vital signs updated for patient record #${patientId}`);
   };
 
@@ -361,14 +527,20 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setBeds((prev) =>
       prev.map((b) => {
         if (b.id === bedId) {
-          return {
+          const updated = {
             ...b,
-            status: 'Occupied',
+            status: 'Occupied' as const,
             patientId: patient.id,
             patientName: patient.name,
             uhid: patient.uhid,
             admissionTimestamp: new Date().toISOString(),
           };
+          fetch(`/api/beds/${bedId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updated),
+          }).catch(() => {});
+          return updated;
         }
         return b;
       })
@@ -405,21 +577,40 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setBeds((prev) =>
       prev.map((b) => {
         if (b.id === bedId) {
-          return {
+          const updated = {
             ...b,
-            status: 'Sanitizing',
+            status: 'Sanitizing' as const,
             patientId: undefined,
             patientName: undefined,
             uhid: undefined,
             admissionTimestamp: undefined,
           };
+          fetch(`/api/beds/${bedId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updated),
+          }).catch(() => {});
+          return updated;
         }
         return b;
       })
     );
 
-    recordAuditLog('UPDATE_EHR', bedId, 'Patient', `Discharged bed ${targetBed.bedNumber}. Initiating sanitization cycle.`);
-    addNotification('info', 'Bed Discharged', `${targetBed.bedNumber} is now queued for sanitization.`);
+    recordAuditLog('UPDATE_EHR', bedId, 'Patient', `Discharged bed ${targetBed.bedNumber}. Sanitization cycle initiated.`);
+    addNotification('info', 'Bed Discharged', `${targetBed.bedNumber} queued for sanitization.`);
+  };
+
+  const editBed = async (bedId: string, updates: Partial<Bed>) => {
+    try {
+      await fetch(`/api/beds/${bedId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+    } catch (e) {}
+
+    setBeds((prev) => prev.map((b) => (b.id === bedId ? { ...b, ...updates } : b)));
+    addNotification('success', 'Bed Updated', 'Bed parameters updated and saved.');
   };
 
   const bookAppointment = (data: Omit<Appointment, 'id' | 'tokenNumber' | 'createdDate'>) => {
@@ -430,12 +621,28 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       createdDate: new Date().toISOString().split('T')[0],
     };
 
+    try {
+      fetch('/api/appointments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newAppointment),
+      });
+    } catch (e) {}
+
     setAppointments((prev) => [newAppointment, ...prev]);
     recordAuditLog('UPDATE_EHR', newAppointment.id, 'Patient', `Scheduled appointment token #${newAppointment.tokenNumber} with ${newAppointment.doctorName}`);
     addNotification('success', 'Appointment Scheduled', `Token #${newAppointment.tokenNumber} for ${newAppointment.patientName}`);
   };
 
   const updateAppointmentStatus = (appointmentId: string, status: Appointment['status']) => {
+    try {
+      fetch(`/api/appointments/${appointmentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+    } catch (e) {}
+
     setAppointments((prev) =>
       prev.map((a) => (a.id === appointmentId ? { ...a, status } : a))
     );
@@ -449,7 +656,13 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (med.id === medicineId) {
           if (med.stockQuantity >= quantity) {
             success = true;
-            return { ...med, stockQuantity: med.stockQuantity - quantity };
+            const updated = { ...med, stockQuantity: med.stockQuantity - quantity };
+            fetch(`/api/medicines/${medicineId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updated),
+            }).catch(() => {});
+            return updated;
           }
         }
         return med;
@@ -470,8 +683,28 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       ...medicineData,
       id: `MED-${Date.now().toString().slice(-4)}`,
     };
+    try {
+      fetch('/api/medicines', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMed),
+      });
+    } catch (e) {}
     setMedicines((prev) => [newMed, ...prev]);
     addNotification('success', 'Medication Added', `${newMed.name} added to pharmacy formulary.`);
+  };
+
+  const editMedicine = async (medicineId: string, updates: Partial<Medicine>) => {
+    try {
+      await fetch(`/api/medicines/${medicineId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+    } catch (e) {}
+
+    setMedicines((prev) => prev.map((m) => (m.id === medicineId ? { ...m, ...updates } : m)));
+    addNotification('success', 'Medication Updated', 'Formulary parameters updated.');
   };
 
   const createLabOrder = (orderData: Omit<LabTestOrder, 'id' | 'orderNumber' | 'orderDate'>) => {
@@ -511,10 +744,32 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       invoiceNumber: `INV-2026-${Math.floor(1000 + Math.random() * 9000)}`,
       billingDate: new Date().toISOString(),
     };
+
+    try {
+      fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newInvoice),
+      });
+    } catch (e) {}
+
     setInvoices((prev) => [newInvoice, ...prev]);
-    recordAuditLog('UPDATE_EHR', newInvoice.id, 'Billing', `Generated medical billing invoice #${newInvoice.invoiceNumber} for $${newInvoice.totalAmount.toFixed(2)}`);
+    recordAuditLog('UPDATE_EHR', newInvoice.id, 'Billing', `Generated billing invoice #${newInvoice.invoiceNumber} for $${newInvoice.totalAmount.toFixed(2)}`);
     addNotification('success', 'Invoice Generated', `Invoice #${newInvoice.invoiceNumber} generated.`);
     return newInvoice;
+  };
+
+  const editInvoice = async (invoiceId: string, updates: Partial<Invoice>) => {
+    try {
+      await fetch(`/api/invoices/${invoiceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+    } catch (e) {}
+
+    setInvoices((prev) => prev.map((inv) => (inv.id === invoiceId ? { ...inv, ...updates } : inv)));
+    addNotification('success', 'Invoice Updated', 'Billing invoice parameters saved.');
   };
 
   const broadcastEmergencyCode = (type: EmergencyBroadcast['type'], location: string) => {
@@ -522,7 +777,7 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       id: `EM-BC-${Date.now().toString().slice(-4)}`,
       type,
       location,
-      reportedBy: ROLE_PROFILES[currentRole].name,
+      reportedBy: currentUser.name,
       timestamp: new Date().toISOString(),
       active: true,
       urgency: 'MAXIMUM_CRITICAL',
@@ -533,12 +788,28 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       ],
     };
 
+    try {
+      fetch('/api/emergency-broadcasts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newBroadcast),
+      });
+    } catch (e) {}
+
     setEmergencyBroadcasts((prev) => [newBroadcast, ...prev]);
     recordAuditLog('CODE_DISPATCH', newBroadcast.id, 'Patient', `DISPATCHED ${type} at ${location}`);
     addNotification('critical', `🚨 ${type} DISPATCHED!`, `Location: ${location}. Crash teams paged!`);
   };
 
   const resolveEmergencyBroadcast = (id: string, notes: string) => {
+    try {
+      fetch(`/api/emergency-broadcasts/${id}/resolve`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolutionNotes: notes }),
+      });
+    } catch (e) {}
+
     setEmergencyBroadcasts((prev) =>
       prev.map((bc) => (bc.id === id ? { ...bc, active: false, resolutionNotes: notes } : bc))
     );
@@ -559,6 +830,14 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updateBloodStock = (bloodGroup: string, deltaUnits: number) => {
+    try {
+      fetch(`/api/blood-bank/${bloodGroup}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deltaUnits }),
+      });
+    } catch (e) {}
+
     setBloodBank((prev) =>
       prev.map((b) => {
         if (b.bloodGroup === bloodGroup) {
@@ -578,6 +857,11 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const resetAllDataToDefaults = () => {
     localStorage.clear();
+    try {
+      fetch('/api/system/reset', { method: 'POST' });
+    } catch (e) {}
+
+    setPersonas(DEFAULT_PERSONAS);
     setPatients(INITIAL_PATIENTS);
     setBeds(INITIAL_BEDS);
     setMedicines(INITIAL_MEDICINES);
@@ -588,19 +872,23 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setBloodBank(INITIAL_BLOOD_BANK);
     setAuditLedger(INITIAL_AUDIT_LEDGER);
     setEmergencyBroadcasts(INITIAL_EMERGENCY_BROADCASTS);
-    addNotification('info', 'System Reset', 'All records restored to clean demonstration dataset.');
+    addNotification('info', 'System Reset', 'All database records restored to default benchmark seed.');
   };
 
   return (
     <HospitalContext.Provider
       value={{
-        currentUser: ROLE_PROFILES[currentRole],
+        currentUser,
         currentRole,
         setCurrentRole,
+        personas,
+        addPersona,
+        deletePersona,
         activeTab,
         setActiveTab,
         darkMode,
         setDarkMode,
+        liveSyncActive,
         patients,
         doctors,
         beds,
@@ -620,16 +908,20 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         addNotification,
         dismissNotification,
         addPatient,
+        editPatient,
         updatePatientVitals,
         assignBedToPatient,
         dischargeBed,
+        editBed,
         bookAppointment,
         updateAppointmentStatus,
         dispenseMedicine,
         addMedicine,
+        editMedicine,
         createLabOrder,
         updateLabStatus,
         createInvoice,
+        editInvoice,
         recordAuditLog,
         broadcastEmergencyCode,
         resolveEmergencyBroadcast,

@@ -1,0 +1,667 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const DATA_DIR = path.join(__dirname, 'data');
+const DB_FILE = path.join(DATA_DIR, 'hospital_db.json');
+
+// Ensure data directory exists
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+// Initial Personas with Role Definitions
+export const INITIAL_PERSONAS = [
+  {
+    id: 'ADM-01',
+    name: 'Arthur Vance, MHA',
+    role: 'admin',
+    title: 'Hospital Administrator / Chief of Operations',
+    email: 'admin.vance@pulsecare.health',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250',
+    department: 'Hospital Administration & Executive Operations',
+    permissions: ['ALL_ACCESS', 'EDIT_PATIENTS', 'EDIT_BILLING', 'EDIT_BEDS', 'MANAGE_PERSONAS', 'DISPATCH_CODE'],
+    isSystemDefault: true,
+  },
+  {
+    id: 'DOC-01',
+    name: 'Dr. Sarah Lin, MD, FACC',
+    role: 'doctor',
+    title: 'Senior Interventional Cardiologist',
+    email: 'sarah.lin@pulsecare.health',
+    avatar: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=250',
+    department: 'Cardiovascular Sciences',
+    licenseNumber: 'MD-88392-CAR',
+    permissions: ['WRITE_PRESCRIPTION', 'VIEW_EHR', 'ORDER_LABS', 'CDSS_ACCESS', 'TELEMEDICINE'],
+    isSystemDefault: true,
+  },
+  {
+    id: 'NUR-01',
+    name: 'Nurse Clara Hughes, BSN, RN',
+    role: 'nurse',
+    title: 'Head Nurse - Intensive Care Unit',
+    email: 'clara.hughes@pulsecare.health',
+    avatar: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?auto=format&fit=crop&q=80&w=250',
+    department: 'Intensive Care Unit (ICU)',
+    licenseNumber: 'RN-55410-ICU',
+    permissions: ['LOG_VITALS', 'MEWS_MONITOR', 'BED_SANITIZATION', 'ER_INTAKE'],
+    isSystemDefault: true,
+  },
+  {
+    id: 'PHARM-01',
+    name: 'Robert Tanaka, PharmD',
+    role: 'pharmacist',
+    title: 'Chief Clinical Pharmacist',
+    email: 'robert.tanaka@pulsecare.health',
+    avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=250',
+    department: 'Clinical Pharmacology & Dispensing',
+    licenseNumber: 'RPH-19042',
+    permissions: ['DISPENSE_DRUGS', 'MANAGE_INVENTORY', 'DDI_REVIEW'],
+    isSystemDefault: true,
+  },
+  {
+    id: 'LAB-01',
+    name: 'Chen Wei, MLS (ASCP)',
+    role: 'lab_technician',
+    title: 'Laboratory Diagnostic Specialist',
+    email: 'chen.wei@pulsecare.health',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
+    department: 'Pathology & Molecular Diagnostics',
+    licenseNumber: 'MLS-77209',
+    permissions: ['RUN_ASSAYS', 'VALIDATE_RESULTS', 'UPLOAD_REPORTS'],
+    isSystemDefault: true,
+  },
+  {
+    id: 'REC-01',
+    name: 'Jessica Gomez',
+    role: 'receptionist',
+    title: 'Front Desk & Patient Admissions',
+    email: 'jessica.gomez@pulsecare.health',
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=250',
+    department: 'Patient Admissions & Front Desk',
+    permissions: ['REGISTER_PATIENTS', 'SCHEDULE_OPD', 'ISSUE_TOKENS'],
+    isSystemDefault: true,
+  },
+  {
+    id: 'PAT-101',
+    name: 'Eleanor Harrison',
+    role: 'patient',
+    title: 'Verified Inpatient Portal',
+    email: 'eleanor.harrison@email.com',
+    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=250',
+    department: 'Patient Portal',
+    permissions: ['VIEW_OWN_EHR', 'VIEW_OWN_BILLS', 'BOOK_OWN_OPD'],
+    isSystemDefault: true,
+  }
+];
+
+export const INITIAL_PATIENTS = [
+  {
+    id: 'PAT-101',
+    uhid: 'PC-2026-8812',
+    name: 'Eleanor Harrison',
+    age: 64,
+    gender: 'Female',
+    bloodGroup: 'O+',
+    phone: '+1 (555) 890-1234',
+    email: 'eleanor.harrison@email.com',
+    address: '742 Evergreen Terrace, Sector 4, Metro City',
+    emergencyContact: {
+      name: 'Robert Harrison',
+      relationship: 'Spouse',
+      phone: '+1 (555) 890-5678',
+    },
+    allergies: ['Penicillin', 'Sulfa'],
+    chronicConditions: ['Coronary Artery Disease', 'Type 2 Diabetes', 'Hypertension'],
+    admissionStatus: 'Inpatient',
+    assignedDoctorId: 'DOC-01',
+    assignedBedId: 'BED-ICU-01',
+    admissionDate: '2026-11-16T14:30:00Z',
+    vitalsHistory: [
+      {
+        id: 'VIT-001',
+        timestamp: '2026-11-19T20:00:00Z',
+        heartRate: 114,
+        systolicBp: 172,
+        diastolicBp: 98,
+        respiratoryRate: 23,
+        spO2: 93,
+        temperature: 38.6,
+        avpu: 'Alert',
+      },
+      {
+        id: 'VIT-002',
+        timestamp: '2026-11-19T16:00:00Z',
+        heartRate: 98,
+        systolicBp: 154,
+        diastolicBp: 92,
+        respiratoryRate: 20,
+        spO2: 95,
+        temperature: 37.8,
+        avpu: 'Alert',
+      }
+    ],
+    medicalTimeline: [
+      {
+        id: 'TL-01',
+        date: '2026-11-16',
+        title: 'Emergency Admission - NSTEMI',
+        type: 'admission',
+        notes: 'Admitted with acute crushing chest pain, troponin elevation. Placed in Cardiac ICU.',
+        doctorName: 'Dr. Sarah Lin',
+      },
+      {
+        id: 'TL-02',
+        date: '2026-11-17',
+        title: 'Coronary Angiography & Stent Placement',
+        type: 'surgery',
+        notes: 'Drug-eluting stent successfully deployed in Left Anterior Descending (LAD) artery.',
+        doctorName: 'Dr. Sarah Lin',
+      }
+    ]
+  },
+  {
+    id: 'PAT-102',
+    uhid: 'PC-2026-9043',
+    name: 'Julian Sterling',
+    age: 42,
+    gender: 'Male',
+    bloodGroup: 'A-',
+    phone: '+1 (555) 789-2345',
+    email: 'j.sterling@domain.com',
+    address: '12 Harbor View Ave, North Point',
+    emergencyContact: {
+      name: 'Claire Sterling',
+      relationship: 'Sister',
+      phone: '+1 (555) 789-9876',
+    },
+    allergies: ['NSAID'],
+    chronicConditions: ['Asthma'],
+    admissionStatus: 'Inpatient',
+    assignedDoctorId: 'DOC-02',
+    assignedBedId: 'BED-GW-01',
+    admissionDate: '2026-11-18T09:15:00Z',
+    vitalsHistory: [
+      {
+        id: 'VIT-003',
+        timestamp: '2026-11-19T21:00:00Z',
+        heartRate: 78,
+        systolicBp: 122,
+        diastolicBp: 80,
+        respiratoryRate: 16,
+        spO2: 98,
+        temperature: 36.8,
+        avpu: 'Alert',
+      }
+    ],
+    medicalTimeline: [
+      {
+        id: 'TL-04',
+        date: '2026-11-18',
+        title: 'Severe Acute Asthma Exacerbation',
+        type: 'admission',
+        notes: 'Nebulized bronchodilators and IV corticosteroids administered. Patient responding well.',
+        doctorName: 'Dr. Marcus Vance',
+      }
+    ]
+  },
+  {
+    id: 'PAT-103',
+    uhid: 'PC-2026-9128',
+    name: 'Samuel Osei',
+    age: 58,
+    gender: 'Male',
+    bloodGroup: 'B+',
+    phone: '+1 (555) 321-7654',
+    email: 'samuel.osei@email.org',
+    address: '88 Cedar Creek Blvd, West District',
+    emergencyContact: {
+      name: 'Kwame Osei',
+      relationship: 'Son',
+      phone: '+1 (555) 321-1234',
+    },
+    allergies: [],
+    chronicConditions: ['End-Stage Renal Disease (ESRD)'],
+    admissionStatus: 'Outpatient',
+    assignedDoctorId: 'DOC-05',
+    vitalsHistory: [
+      {
+        id: 'VIT-004',
+        timestamp: '2026-11-19T18:30:00Z',
+        heartRate: 72,
+        systolicBp: 138,
+        diastolicBp: 88,
+        respiratoryRate: 18,
+        spO2: 97,
+        temperature: 37.0,
+        avpu: 'Alert',
+      }
+    ],
+    medicalTimeline: [
+      {
+        id: 'TL-05',
+        date: '2026-11-15',
+        title: 'Hemodialysis & Transplant Evaluation',
+        type: 'consultation',
+        notes: 'Dialysis clearance optimal. Placed on active UNOS/Hospital kidney recipient registry.',
+        doctorName: 'Dr. Aisha Patel',
+      }
+    ]
+  },
+  {
+    id: 'PAT-104',
+    uhid: 'PC-2026-9281',
+    name: 'Maya Linnea',
+    age: 29,
+    gender: 'Female',
+    bloodGroup: 'AB+',
+    phone: '+1 (555) 432-8765',
+    email: 'maya.linnea@domain.com',
+    address: '404 Skyline Towers, Central City',
+    emergencyContact: {
+      name: 'Sofia Linnea',
+      relationship: 'Mother',
+      phone: '+1 (555) 432-1122',
+    },
+    allergies: ['Latex'],
+    chronicConditions: ['Migraine with Aura'],
+    admissionStatus: 'Outpatient',
+    assignedDoctorId: 'DOC-03',
+    vitalsHistory: [
+      {
+        id: 'VIT-005',
+        timestamp: '2026-11-19T11:00:00Z',
+        heartRate: 68,
+        systolicBp: 118,
+        diastolicBp: 74,
+        respiratoryRate: 15,
+        spO2: 99,
+        temperature: 36.6,
+        avpu: 'Alert',
+      }
+    ],
+    medicalTimeline: [
+      {
+        id: 'TL-06',
+        date: '2026-11-19',
+        title: 'Neurology Consultation',
+        type: 'consultation',
+        notes: 'Neurological exam normal; brain MRI scheduled for vascular review.',
+        doctorName: 'Dr. Elena Rostova',
+      }
+    ]
+  }
+];
+
+export const INITIAL_BEDS = [
+  {
+    id: 'BED-ICU-01',
+    bedNumber: 'ICU-101',
+    ward: 'ICU',
+    floor: 2,
+    roomNumber: 'Room 201',
+    status: 'Occupied',
+    patientId: 'PAT-101',
+    patientName: 'Eleanor Harrison',
+    uhid: 'PC-2026-8812',
+    hasOxygenSupport: true,
+    hasVentilator: true,
+    dailyRate: 1500,
+    admissionTimestamp: '2026-11-16T14:30:00Z',
+  },
+  {
+    id: 'BED-ICU-02',
+    bedNumber: 'ICU-102',
+    ward: 'ICU',
+    floor: 2,
+    roomNumber: 'Room 202',
+    status: 'Available',
+    hasOxygenSupport: true,
+    hasVentilator: true,
+    dailyRate: 1500,
+  },
+  {
+    id: 'BED-ICU-03',
+    bedNumber: 'ICU-103',
+    ward: 'ICU',
+    floor: 2,
+    roomNumber: 'Room 203',
+    status: 'Sanitizing',
+    hasOxygenSupport: true,
+    hasVentilator: true,
+    dailyRate: 1500,
+  },
+  {
+    id: 'BED-ER-01',
+    bedNumber: 'ER-BAY-1',
+    ward: 'Emergency',
+    floor: 0,
+    roomNumber: 'Trauma Bay 1',
+    status: 'Occupied',
+    patientId: 'PAT-105',
+    patientName: 'John Doe (Trauma Inbound)',
+    uhid: 'PC-2026-ER99',
+    hasOxygenSupport: true,
+    hasVentilator: true,
+    dailyRate: 800,
+  },
+  {
+    id: 'BED-ER-02',
+    bedNumber: 'ER-BAY-2',
+    ward: 'Emergency',
+    floor: 0,
+    roomNumber: 'Trauma Bay 2',
+    status: 'Available',
+    hasOxygenSupport: true,
+    hasVentilator: true,
+    dailyRate: 800,
+  },
+  {
+    id: 'BED-GW-01',
+    bedNumber: 'GW-301',
+    ward: 'General Ward A',
+    floor: 1,
+    roomNumber: 'Ward Wing North',
+    status: 'Occupied',
+    patientId: 'PAT-102',
+    patientName: 'Julian Sterling',
+    uhid: 'PC-2026-9043',
+    hasOxygenSupport: true,
+    hasVentilator: false,
+    dailyRate: 350,
+  },
+  {
+    id: 'BED-GW-02',
+    bedNumber: 'GW-302',
+    ward: 'General Ward A',
+    floor: 1,
+    roomNumber: 'Ward Wing North',
+    status: 'Available',
+    hasOxygenSupport: false,
+    hasVentilator: false,
+    dailyRate: 350,
+  }
+];
+
+export const INITIAL_MEDICINES = [
+  {
+    id: 'MED-001',
+    name: 'Warfarin Sodium',
+    genericName: 'Warfarin',
+    category: 'Cardiovascular',
+    dosageForm: 'Tablet',
+    strength: '5 mg',
+    stockQuantity: 420,
+    reorderLevel: 100,
+    batchNumber: 'WF-2026-08',
+    expiryDate: '2027-08-30',
+    unitPrice: 12.5,
+    manufacturer: 'Bristol Myers',
+    contraindications: ['Aspirin', 'NSAIDs', 'Active internal hemorrhage'],
+  },
+  {
+    id: 'MED-002',
+    name: 'Aspirin Cardio',
+    genericName: 'Acetylsalicylic Acid',
+    category: 'Analgesic',
+    dosageForm: 'Tablet',
+    strength: '81 mg',
+    stockQuantity: 850,
+    reorderLevel: 200,
+    batchNumber: 'ASP-9921',
+    expiryDate: '2028-02-15',
+    unitPrice: 4.0,
+    manufacturer: 'Bayer Pharma',
+    contraindications: ['Warfarin', 'Peptic ulcer disease'],
+  },
+  {
+    id: 'MED-003',
+    name: 'Amoxicillin Trihydrate',
+    genericName: 'Amoxicillin',
+    category: 'Antibiotic',
+    dosageForm: 'Capsule',
+    strength: '500 mg',
+    stockQuantity: 28, // Low stock
+    reorderLevel: 50,
+    batchNumber: 'AMX-4412',
+    expiryDate: '2026-12-01',
+    unitPrice: 8.0,
+    manufacturer: 'GlaxoSmithKline',
+    contraindications: ['Penicillin allergy', 'Mononucleosis'],
+  },
+  {
+    id: 'MED-004',
+    name: 'Lisinopril',
+    genericName: 'Lisinopril',
+    category: 'Cardiovascular',
+    dosageForm: 'Tablet',
+    strength: '10 mg',
+    stockQuantity: 340,
+    reorderLevel: 75,
+    batchNumber: 'LIS-3310',
+    expiryDate: '2027-11-20',
+    unitPrice: 9.5,
+    manufacturer: 'AstraZeneca',
+    contraindications: ['Spironolactone', 'Angioedema history', 'Pregnancy'],
+  }
+];
+
+export const INITIAL_DOCTORS = [
+  {
+    id: 'DOC-01',
+    name: 'Dr. Sarah Lin, MD, FACC',
+    specialty: 'Interventional Cardiology',
+    department: 'Cardiovascular Sciences',
+    qualifications: 'MD (Harvard), Fellowship in Interventional Cardiology',
+    experienceYears: 16,
+    phone: '+1 (555) 234-5678',
+    email: 'sarah.lin@pulsecare.health',
+    consultationFee: 250,
+    rating: 4.9,
+    availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+    shiftTiming: '08:00 AM - 03:00 PM',
+    isOnDuty: true,
+    avatar: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=250',
+  },
+  {
+    id: 'DOC-02',
+    name: 'Dr. Marcus Vance, MD, PhD',
+    specialty: 'Trauma & Critical Care',
+    department: 'Emergency Medicine',
+    qualifications: 'MD (Johns Hopkins), ATLS Instructor',
+    experienceYears: 14,
+    phone: '+1 (555) 345-6789',
+    email: 'marcus.vance@pulsecare.health',
+    consultationFee: 200,
+    rating: 4.8,
+    availableDays: ['Mon', 'Wed', 'Fri', 'Sat'],
+    shiftTiming: '07:00 PM - 07:00 AM (Night Shift)',
+    isOnDuty: true,
+    avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=250',
+  },
+  {
+    id: 'DOC-03',
+    name: 'Dr. Elena Rostova, MD',
+    specialty: 'Neurocritical Care & Neurology',
+    department: 'Neurosciences',
+    qualifications: 'MD (Oxford), Board Certified Neurocritical Care',
+    experienceYears: 12,
+    phone: '+1 (555) 456-7890',
+    email: 'elena.rostova@pulsecare.health',
+    consultationFee: 280,
+    rating: 4.95,
+    availableDays: ['Tue', 'Thu', 'Fri', 'Sat'],
+    shiftTiming: '09:00 AM - 05:00 PM',
+    isOnDuty: true,
+    avatar: 'https://images.unsplash.com/photo-1594824813501-483758064433?auto=format&fit=crop&q=80&w=250',
+  }
+];
+
+export const INITIAL_INVOICES = [
+  {
+    id: 'INV-2026-001',
+    invoiceNumber: 'INV-2026-001',
+    patientId: 'PAT-101',
+    patientName: 'Eleanor Harrison',
+    uhid: 'PC-2026-8812',
+    billingDate: '2026-11-19T18:00:00Z',
+    items: [
+      { id: 'ITM-01', description: 'Cardiac Intensive Care Unit (CICU) 3 Days Stay', category: 'Room', quantity: 3, unitPrice: 1500, total: 4500 },
+      { id: 'ITM-02', description: 'Coronary Angiography & LAD Stenting Procedure', category: 'Surgery', quantity: 1, unitPrice: 6200, total: 6200 },
+      { id: 'ITM-03', description: 'Senior Consultant Interventional Cardiologist Rounds', category: 'Consultation', quantity: 3, unitPrice: 250, total: 750 },
+    ],
+    subTotal: 11450,
+    discount: 500,
+    tax: 547.5,
+    totalAmount: 11497.5,
+    insuranceClaim: {
+      hasInsurance: true,
+      provider: 'BlueCross Shield Enterprise Health',
+      policyNumber: 'BCS-9912803',
+      coverageAmount: 10000,
+      claimStatus: 'Approved',
+      copayAmount: 1497.5,
+    },
+    paymentStatus: 'Claim Processing',
+    paymentMethod: 'Insurance Direct',
+  }
+];
+
+export const INITIAL_APPOINTMENTS = [
+  {
+    id: 'APP-1001',
+    tokenNumber: 1,
+    patientId: 'PAT-104',
+    patientName: 'Maya Linnea',
+    patientPhone: '+1 (555) 432-8765',
+    doctorId: 'DOC-03',
+    doctorName: 'Dr. Elena Rostova',
+    department: 'Neurosciences',
+    appointmentDate: '2026-11-20',
+    timeSlot: '09:30 AM',
+    type: 'OPD',
+    status: 'Scheduled',
+    symptoms: 'Recurrent unilateral throbbing headache with aura.',
+    createdDate: '2026-11-18',
+  }
+];
+
+export const INITIAL_BLOOD_BANK = [
+  { id: 'BLD-O-POS', bloodGroup: 'O+', unitsAvailable: 24, minSafeUnits: 15, plasmaUnits: 18, temperatureCelsius: 3.8, tempStatus: 'Optimal' },
+  { id: 'BLD-O-NEG', bloodGroup: 'O-', unitsAvailable: 4, minSafeUnits: 10, plasmaUnits: 5, temperatureCelsius: 4.1, tempStatus: 'Warning' },
+  { id: 'BLD-A-POS', bloodGroup: 'A+', unitsAvailable: 19, minSafeUnits: 12, plasmaUnits: 14, temperatureCelsius: 3.9, tempStatus: 'Optimal' },
+  { id: 'BLD-A-NEG', bloodGroup: 'A-', unitsAvailable: 8, minSafeUnits: 6, plasmaUnits: 6, temperatureCelsius: 4.0, tempStatus: 'Optimal' },
+  { id: 'BLD-B-POS', bloodGroup: 'B+', unitsAvailable: 22, minSafeUnits: 10, plasmaUnits: 15, temperatureCelsius: 3.7, tempStatus: 'Optimal' },
+  { id: 'BLD-B-NEG', bloodGroup: 'B-', unitsAvailable: 5, minSafeUnits: 5, plasmaUnits: 4, temperatureCelsius: 4.2, tempStatus: 'Optimal' },
+  { id: 'BLD-AB-POS', bloodGroup: 'AB+', unitsAvailable: 11, minSafeUnits: 6, plasmaUnits: 20, temperatureCelsius: 3.6, tempStatus: 'Optimal' },
+  { id: 'BLD-AB-NEG', bloodGroup: 'AB-', unitsAvailable: 3, minSafeUnits: 4, plasmaUnits: 8, temperatureCelsius: 4.0, tempStatus: 'Optimal' }
+];
+
+export const INITIAL_EMERGENCY_BROADCASTS = [
+  {
+    id: 'EM-BC-01',
+    type: 'Code Blue (Cardiac)',
+    location: 'ICU Floor 2 - Bed 101',
+    reportedBy: 'Nurse Clara Hughes',
+    timestamp: '2026-11-19T22:30:00Z',
+    active: false,
+    urgency: 'MAXIMUM_CRITICAL',
+    teamPagingStatus: [
+      { teamName: 'Anesthesiology Airway Crash Team', status: 'On Scene', respondersCount: 2 },
+      { teamName: 'ICU Senior Medical Officer', status: 'On Scene', respondersCount: 1 }
+    ],
+    resolutionNotes: 'ROSC achieved within 4 minutes. Patient stabilized on norepinephrine drip.',
+  }
+];
+
+class Database {
+  constructor() {
+    this.data = this.loadDatabase();
+  }
+
+  loadDatabase() {
+    try {
+      if (fs.existsSync(DB_FILE)) {
+        const fileContent = fs.readFileSync(DB_FILE, 'utf-8');
+        return JSON.parse(fileContent);
+      }
+    } catch (err) {
+      console.error('Failed to read database file, initializing default seed:', err);
+    }
+    return this.createDefaultDatabase();
+  }
+
+  createDefaultDatabase() {
+    const defaultData = {
+      personas: INITIAL_PERSONAS,
+      patients: INITIAL_PATIENTS,
+      doctors: INITIAL_DOCTORS,
+      beds: INITIAL_BEDS,
+      medicines: INITIAL_MEDICINES,
+      invoices: INITIAL_INVOICES,
+      appointments: INITIAL_APPOINTMENTS,
+      bloodBank: INITIAL_BLOOD_BANK,
+      emergencyBroadcasts: INITIAL_EMERGENCY_BROADCASTS,
+      auditLedger: [],
+      prescriptions: [],
+      lastUpdated: new Date().toISOString(),
+    };
+    this.persist(defaultData);
+    return defaultData;
+  }
+
+  persist(dataToSave) {
+    try {
+      const data = dataToSave || this.data;
+      data.lastUpdated = new Date().toISOString();
+      const tempPath = DB_FILE + '.tmp';
+      fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf-8');
+      fs.renameSync(tempPath, DB_FILE);
+    } catch (err) {
+      console.error('Error persisting database to disk:', err);
+    }
+  }
+
+  get(collectionName) {
+    return this.data[collectionName] || [];
+  }
+
+  set(collectionName, items) {
+    this.data[collectionName] = items;
+    this.persist();
+    return this.data[collectionName];
+  }
+
+  insert(collectionName, item) {
+    if (!this.data[collectionName]) {
+      this.data[collectionName] = [];
+    }
+    this.data[collectionName].unshift(item);
+    this.persist();
+    return item;
+  }
+
+  update(collectionName, id, updates) {
+    const items = this.data[collectionName] || [];
+    const index = items.findIndex((it) => it.id === id);
+    if (index !== -1) {
+      items[index] = { ...items[index], ...updates };
+      this.data[collectionName] = items;
+      this.persist();
+      return items[index];
+    }
+    return null;
+  }
+
+  delete(collectionName, id) {
+    const items = this.data[collectionName] || [];
+    const filtered = items.filter((it) => it.id !== id);
+    this.data[collectionName] = filtered;
+    this.persist();
+    return true;
+  }
+}
+
+export const db = new Database();
