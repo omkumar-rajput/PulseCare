@@ -6,6 +6,7 @@
   "description": "Next-Generation Enterprise Hospital Management System (HMS) featuring 10 Core Hospital Workflows and 10 Cutting-Edge Clinical AI & Critical Care Modules.",
   "scripts": {
     "dev": "concurrently -k -n \"SERVER,CLIENT\" -c \"blue,teal\" \"node server/index.js\" \"vite\"",
+    "start": "node server/index.js",
     "server": "node server/index.js",
     "client": "vite",
     "build": "tsc && vite build",

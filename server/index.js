@@ -1,6 +1,13 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
 import { db, INITIAL_PERSONAS } from './db.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const distPath = path.resolve(__dirname, '../dist');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -332,6 +339,17 @@ app.post('/api/system/reset', (req, res) => {
   const fresh = db.createDefaultDatabase();
   res.json({ success: true, message: 'All hospital database records restored to default seed.', data: fresh });
 });
+
+// Serve frontend static build if dist folder exists (Single-port production deployment)
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 // Start Server
 app.listen(PORT, () => {
