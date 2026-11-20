@@ -449,10 +449,23 @@ app.post('/api/ai/chat', async (req, res) => {
     return res.status(400).json({ error: 'Message is required' });
   }
 
+  // Aggregate all registered patients from client context OR backend database
+  const rawPatients = (hospitalContext?.patientsList && hospitalContext.patientsList.length > 0)
+    ? hospitalContext.patientsList
+    : db.get('patients');
+
+  const patientsListString = rawPatients.map((p) => {
+    const v = p.vitals ? `HR ${p.vitals.hr || p.vitals.heartRate} bpm, BP ${p.vitals.bp || `${p.vitals.systolicBp}/${p.vitals.diastolicBp}`}, SpO2 ${p.vitals.spO2}%` : '';
+    const alg = (p.allergies && p.allergies.length > 0) ? `Allergies: ${p.allergies.join(', ')}` : 'No known allergies';
+    return `• ${p.name} (UHID: ${p.uhid}, Age: ${p.age}, Gender: ${p.gender}, Blood: ${p.bloodGroup}, Status: ${p.admissionStatus}, ${alg}${v ? `, ${v}` : ''})`;
+  }).join('\n');
+
   // Construct comprehensive clinical and hospital context
   const systemPrompt = `You are PulseAI, an advanced real-time Clinical & Operational AI for PulseCare Enterprise Hospital Management System.
 Current Real-Time Hospital Knowledge:
-- Active Patients: ${hospitalContext?.patientsCount || '6'} registered inpatients & outpatients (e.g. Eleanor Harrison in ICU Bed 101, etc.).
+- Registered Patients List (${rawPatients.length} active patients):
+${patientsListString}
+
 - Bed Fleet: ${hospitalContext?.bedsCount || '12'} beds total across ICU, CCU, Emergency, General Ward.
 - Doctors: ${hospitalContext?.doctorsCount || '6'} on-duty specialists across Cardiology, Trauma ER, Nephrology, Surgery.
 - Blood Bank: ${hospitalContext?.bloodUnits || '96'} units across 8 blood groups (O- is critically low at 4 units).
@@ -460,8 +473,8 @@ Current Real-Time Hospital Knowledge:
 - Emergency Codes: Active Code Blue crash team paging operations.
 
 INSTRUCTIONS:
-1. Provide accurate, helpful, and empathetic answers to BOTH hospital-specific questions and ANY general medical, scientific, operational, or everyday questions the user asks.
-2. If the user asks about patients, beds, doctors, appointments, or blood bank, reference the live hospital context with specific numbers and actionable steps.
+1. When asked about ANY patient (such as "who is JOHN", "tell me about Eleanor", "who is Omkumar"), refer directly to the Registered Patients List above and provide their exact full profile (Name, UHID, Age, Gender, Blood Group, Admission Status, Allergies, and Vitals).
+2. Answer BOTH hospital-specific questions and ANY general medical, scientific, operational, or everyday questions the user asks.
 3. If the user asks medical or diagnostic questions, provide evidence-based clinical guidance, differential diagnoses, or pharmacological cautions.
 4. Format responses cleanly with markdown bullet points, bold key terms, and emojis where appropriate.`;
 

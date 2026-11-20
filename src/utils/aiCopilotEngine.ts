@@ -154,7 +154,55 @@ export function answerHospitalQuery(query: string, ctx: HospitalKnowledgeContext
   const id = `MSG-${Date.now()}`;
   const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  // 1. Bed & ICU Ventilator Availability
+  // 1. DIRECT PATIENT LOOKUP (Matches ANY patient in the database by full name, first name, or UHID)
+  // Handles: "who is JOHN", "John", "tell me about Eleanor", "Omkumar Rajput", "PC-2026-9266"
+  const matchingPatient = ctx.patients.find((p) => {
+    if (!p.name) return false;
+    const nameLower = p.name.toLowerCase().trim();
+    if (q.includes(nameLower)) return true;
+    const words = nameLower.split(/\s+/).filter((w) => w.length >= 3);
+    if (words.some((w) => q.includes(w))) return true;
+    if (p.uhid && q.includes(p.uhid.toLowerCase())) return true;
+    return false;
+  });
+
+  if (matchingPatient) {
+    const v = matchingPatient.vitalsHistory?.[0];
+    const assignedBed = ctx.beds.find((b) => b.id === matchingPatient.assignedBedId || b.uhid === matchingPatient.uhid);
+    const doctor = ctx.doctors.find((d) => d.id === matchingPatient.assignedDoctorId);
+
+    let text = `👤 **Patient Dossier: ${matchingPatient.name}** (${matchingPatient.uhid})\n\n`;
+    text += `• **Demographics**: ${matchingPatient.age} years old • ${matchingPatient.gender} • Blood Group: **${matchingPatient.bloodGroup}**\n`;
+    text += `• **Admission Status**: **${matchingPatient.admissionStatus}** ${assignedBed ? `in **${assignedBed.ward} (Bed: ${assignedBed.bedNumber})**` : ''}\n`;
+    text += `• **Documented Allergies**: ${matchingPatient.allergies?.length ? `⚠️ **${matchingPatient.allergies.join(', ')}**` : 'No known drug allergies (NKDA)'}\n`;
+    text += `• **Attending Staff**: ${doctor ? doctor.name : 'Arthur Vance, MHA / Assigned Staff'}\n`;
+    if (matchingPatient.chronicConditions?.length) {
+      text += `• **Medical Conditions / Notes**: ${matchingPatient.chronicConditions.join(', ')}\n`;
+    }
+    if (v) {
+      text += `\n📊 **Current Vitals & Telemetry**:\n`;
+      text += `• **Heart Rate**: ${v.heartRate} bpm ${v.heartRate > 100 ? '⚠️ (Tachycardia)' : ''}\n`;
+      text += `• **Blood Pressure**: ${v.systolicBp}/${v.diastolicBp} mmHg\n`;
+      text += `• **SpO2 Oxygen**: ${v.spO2}% ${v.spO2 < 95 ? '⚠️ (Borderline Hypoxia)' : ''}\n`;
+      text += `• **Respiratory Rate**: ${v.respiratoryRate}/min\n`;
+      text += `• **Temperature**: ${v.temperature}°C • **Consciousness**: ${v.avpu}\n`;
+    }
+
+    return {
+      id,
+      sender: 'assistant',
+      text,
+      timestamp,
+      badges: [matchingPatient.name, matchingPatient.uhid, matchingPatient.bloodGroup, matchingPatient.admissionStatus],
+      actionShortcut: {
+        label: `View ${matchingPatient.name} EHR`,
+        targetTab: 'core-patients'
+      },
+      suggestions: [`Log vitals for ${matchingPatient.name}`, `Book appointment for ${matchingPatient.name}`, 'Hospital health audit']
+    };
+  }
+
+  // 2. Bed & ICU Ventilator Availability
   if (q.includes('bed') || q.includes('icu') || q.includes('ventilator') || q.includes('room') || q.includes('occupan')) {
     const totalBeds = ctx.beds.length;
     const availableBeds = ctx.beds.filter((b) => b.status === 'Available');
@@ -487,18 +535,89 @@ export async function queryRealTimeAICopilot(
   const lowMedicines = ctx.medicines.filter((m) => m.stockQuantity <= m.reorderLevel);
   const activeCodes = ctx.emergencyBroadcasts.filter((c) => c.active);
 
+  // Full Patient Profiles List for Context
+  const patientsList = ctx.patients.map((p) => {
+    const v = p.vitalsHistory?.[0];
+    const attending = ctx.doctors.find((d) => d.id === p.assignedDoctorId)?.name || 'Arthur Vance, MHA';
+    return {
+      name: p.name,
+      uhid: p.uhid,
+      age: p.age,
+      gender: p.gender,
+      bloodGroup: p.bloodGroup,
+      admissionStatus: p.admissionStatus,
+      allergies: p.allergies || [],
+      chronicConditions: p.chronicConditions || [],
+      vitals: v
+        ? {
+            hr: v.heartRate,
+            bp: `${v.systolicBp}/${v.diastolicBp}`,
+            spO2: v.spO2,
+            temp: v.temperature,
+            rr: v.respiratoryRate
+          }
+        : null,
+      attendingDoctor: attending
+    };
+  });
+
+  const patientsListDetails = ctx.patients
+    .map((p) => {
+      const v = p.vitalsHistory?.[0];
+      const vStr = v
+        ? `HR ${v.heartRate} bpm, BP ${v.systolicBp}/${v.diastolicBp}, SpO2 ${v.spO2}%, Temp ${v.temperature}°C`
+        : 'Vitals stable';
+      const algStr = p.allergies?.length ? `Allergies: ${p.allergies.join(', ')}` : 'No known allergies';
+      return `• Patient: ${p.name} | UHID: ${p.uhid} | Age: ${p.age} | Gender: ${p.gender} | Blood: ${p.bloodGroup} | Status: ${p.admissionStatus} | ${algStr} | ${vStr}`;
+    })
+    .join('\n');
+
+  // Specific patient match check in query
+  const targetPatient = ctx.patients.find((p) => {
+    if (!p.name) return false;
+    const nameLower = p.name.toLowerCase().trim();
+    if (query.toLowerCase().includes(nameLower)) return true;
+    const words = nameLower.split(/\s+/).filter((w) => w.length >= 3);
+    return words.some((w) => query.toLowerCase().includes(w)) || (p.uhid && query.toLowerCase().includes(p.uhid.toLowerCase()));
+  });
+
+  const targetPatientPrompt = targetPatient
+    ? `\n\nCRITICAL NOTE: THE USER IS SPECIFICALLY INQUIRING ABOUT PATIENT "${targetPatient.name}":
+- Full Name: ${targetPatient.name}
+- UHID: ${targetPatient.uhid}
+- Age: ${targetPatient.age} years old | Gender: ${targetPatient.gender} | Blood Group: ${targetPatient.bloodGroup}
+- Admission Status: ${targetPatient.admissionStatus}
+- Allergies: ${targetPatient.allergies?.length ? targetPatient.allergies.join(', ') : 'None reported (NKDA)'}
+- Diagnosis / Notes: ${targetPatient.chronicConditions?.join(', ') || 'General Consultation'}
+- Vitals: ${
+        targetPatient.vitalsHistory?.[0]
+          ? `HR ${targetPatient.vitalsHistory[0].heartRate} bpm, BP ${targetPatient.vitalsHistory[0].systolicBp}/${targetPatient.vitalsHistory[0].diastolicBp}, SpO2 ${targetPatient.vitalsHistory[0].spO2}%, Resp ${targetPatient.vitalsHistory[0].respiratoryRate}/min`
+          : 'Normal'
+      }
+- Attending: ${ctx.doctors.find((d) => d.id === targetPatient.assignedDoctorId)?.name || 'Arthur Vance, MHA / Assigned Staff'}
+YOU MUST STATE THAT ${targetPatient.name} IS A REGISTERED PATIENT IN THIS HOSPITAL AND PROVIDE THEIR DETAILS.\n\n`
+    : '';
+
   const systemPrompt = `You are PulseAI, the real-time Chief Clinical & Operational Medical Intelligence AI for PulseCare Enterprise Hospital Management System.
 You have omniscient, real-time knowledge of all active systems in this hospital:
-- Registered Patients: ${patientsCount} patients (${ctx.patients.map((p) => `${p.name} [UHID: ${p.uhid}, Status: ${p.admissionStatus}, Blood: ${p.bloodGroup}]`).join(', ')}).
-- ICU & Bed Fleet: ${bedsCount} total beds (${availableBeds.length} available). Available ICU beds with mechanical ventilators: ${icuVentilatorBeds.map((b) => b.bedNumber).join(', ') || 'None currently available'}.
+- Active Registered Patients in Database (${patientsCount} patients):
+${patientsListDetails}
+${targetPatientPrompt}
+- ICU & Bed Fleet: ${bedsCount} total beds (${availableBeds.length} available). Available ICU beds with mechanical ventilators: ${
+    icuVentilatorBeds.map((b) => b.bedNumber).join(', ') || 'None currently available'
+  }.
 - Doctors on Duty: ${onDutyDoctors.map((d) => `${d.name} (${d.specialty}, Shift: ${d.shiftTiming})`).join('; ')}.
-- Blood Bank Reserves: ${totalBloodUnits} total units across 8 groups. Universal O- Negative: ${oNeg ? `${oNeg.unitsAvailable} units (Safe threshold: ${oNeg.minSafeUnits})` : 'N/A'}.
-- Pharmacy Formularies: ${ctx.medicines.length} total medicines. Critical low stock: ${lowMedicines.map((m) => `${m.name} (${m.stockQuantity} left)`).join(', ') || 'None'}.
+- Blood Bank Reserves: ${totalBloodUnits} total units across 8 groups. Universal O- Negative: ${
+    oNeg ? `${oNeg.unitsAvailable} units (Safe threshold: ${oNeg.minSafeUnits})` : 'N/A'
+  }.
+- Pharmacy Formularies: ${ctx.medicines.length} total medicines. Critical low stock: ${
+    lowMedicines.map((m) => `${m.name} (${m.stockQuantity} left)`).join(', ') || 'None'
+  }.
 - Emergency Protocols: ${activeCodes.length > 0 ? activeCodes.map((c) => `${c.type} at ${c.location}`).join(', ') : 'All clear / Standby'}.
 
 INSTRUCTIONS:
-1. Provide comprehensive, accurate, and professional answers to ANY questions the user asks — including clinical diagnostics, pharmacology, medical conditions, operational decisions, or general medical science.
-2. If the user asks about this hospital (patients, beds, staff, blood bank, stock), cite the exact live figures above.
+1. When asked about ANY patient (such as "who is JOHN", "tell me about Eleanor", "who is Omkumar"), refer directly to the Registered Patients list above and provide their exact full profile. Never claim a registered patient does not exist.
+2. Provide comprehensive, accurate, and professional answers to ANY questions the user asks — including clinical diagnostics, pharmacology, medical conditions, operational decisions, or general medical science.
 3. If the user asks general medical, health, scientific, or everyday questions, answer with evidence-based clinical accuracy.
 4. Format using clean Markdown with bold headers and bullet points.`;
 
@@ -590,6 +709,7 @@ INSTRUCTIONS:
         apiKey: config.apiKey,
         hospitalContext: {
           patientsCount,
+          patientsList,
           bedsCount,
           doctorsCount: ctx.doctors.length,
           bloodUnits: totalBloodUnits,
