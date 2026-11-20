@@ -176,6 +176,14 @@ export function answerHospitalQuery(query: string, ctx: HospitalKnowledgeContext
     text += `• **OPD Consultation Fee**: $${matchingDoc.consultationFee}\n`;
     text += `• **Contact Info**: ${matchingDoc.email} • ${matchingDoc.phone}\n`;
 
+    const matchingPatientEntry = ctx.patients.find((p) => {
+      const cleanDoc = matchingDoc.name.toLowerCase().replace(/^dr\.\s*/i, '').trim();
+      return p.name.toLowerCase().trim() === cleanDoc || p.name.toLowerCase().trim() === matchingDoc.name.toLowerCase().trim();
+    });
+    if (matchingPatientEntry) {
+      text += `• **Patient Chart Record**: Also indexed with patient EHR (UHID: ${matchingPatientEntry.uhid}, ${matchingPatientEntry.admissionStatus}).\n`;
+    }
+
     return {
       id,
       sender: 'assistant',
