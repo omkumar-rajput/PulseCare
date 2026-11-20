@@ -58,6 +58,18 @@ const DEFAULT_PERSONAS: UserProfile[] = [
     isSystemDefault: true,
   },
   {
+    id: 'DOC-OMK',
+    name: 'Omkumar Rajput',
+    role: 'doctor',
+    title: 'Consultant Physician',
+    email: 'omkumar.rajput@pulsecare.health',
+    avatar: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=250',
+    department: 'Cardiovascular Sciences',
+    licenseNumber: 'MD-99412-CARD',
+    permissions: ['WRITE_PRESCRIPTION', 'VIEW_EHR', 'ORDER_LABS', 'CDSS_ACCESS', 'TELEMEDICINE'],
+    isSystemDefault: true,
+  },
+  {
     id: 'DOC-01',
     name: 'Dr. Sarah Lin, MD, FACC',
     role: 'doctor',

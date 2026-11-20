@@ -24,6 +24,7 @@ export const FloatingAICopilot: React.FC = () => {
   const {
     patients,
     doctors,
+    personas,
     beds,
     medicines,
     labOrders,
@@ -64,6 +65,7 @@ export const FloatingAICopilot: React.FC = () => {
   const knowledgeContext = {
     patients,
     doctors,
+    personas,
     beds,
     medicines,
     labOrders,

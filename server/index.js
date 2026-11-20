@@ -454,27 +454,117 @@ app.post('/api/ai/chat', async (req, res) => {
     ? hospitalContext.patientsList
     : db.get('patients');
 
+  // Aggregate all credentialed doctors from client context OR backend database
+  const rawDoctors = (hospitalContext?.doctorsList && hospitalContext.doctorsList.length > 0)
+    ? hospitalContext.doctorsList
+    : db.get('doctors');
+
+  // Aggregate all hospital personas from client context OR backend database
+  const rawPersonas = (hospitalContext?.personasList && hospitalContext.personasList.length > 0)
+    ? hospitalContext.personasList
+    : db.get('personas');
+
   const patientsListString = rawPatients.map((p) => {
     const v = p.vitals ? `HR ${p.vitals.hr || p.vitals.heartRate} bpm, BP ${p.vitals.bp || `${p.vitals.systolicBp}/${p.vitals.diastolicBp}`}, SpO2 ${p.vitals.spO2}%` : '';
     const alg = (p.allergies && p.allergies.length > 0) ? `Allergies: ${p.allergies.join(', ')}` : 'No known allergies';
-    return `• ${p.name} (UHID: ${p.uhid}, Age: ${p.age}, Gender: ${p.gender}, Blood: ${p.bloodGroup}, Status: ${p.admissionStatus}, ${alg}${v ? `, ${v}` : ''})`;
+    return `• Patient: ${p.name} (UHID: ${p.uhid}, Age: ${p.age}, Gender: ${p.gender}, Blood: ${p.bloodGroup}, Status: ${p.admissionStatus}, ${alg}${v ? `, ${v}` : ''})`;
   }).join('\n');
+
+  const doctorsListString = rawDoctors.map((d) => {
+    return `• Doctor/Specialist: ${d.name} (${d.specialty || 'General Medicine'}, Dept: ${d.department || 'Clinical Services'}, Status: ${d.isOnDuty ? 'ON DUTY' : 'Off Duty'}, Shift: ${d.shiftTiming || '09:00 AM - 05:00 PM'}, Fee: $${d.consultationFee || 150}, Email: ${d.email || 'doctor@pulsecare.health'})`;
+  }).join('\n');
+
+  const personasListString = rawPersonas.map((p) => {
+    return `• Staff Persona: ${p.name} (Role: ${(p.role || 'STAFF').toUpperCase()}, Title: ${p.title || 'Specialist'}, Dept: ${p.department || 'Hospital Operations'}, Email: ${p.email || 'staff@pulsecare.health'})`;
+  }).join('\n');
+
+  // Match target person in user message
+  const msgLower = message.toLowerCase().trim();
+
+  const targetDoc = rawDoctors.find((d) => {
+    if (!d.name) return false;
+    const nameLower = d.name.toLowerCase().trim();
+    const clean = nameLower.replace(/^dr\.\s*/i, '').trim();
+    if (msgLower.includes(nameLower) || (clean && msgLower.includes(clean))) return true;
+    const parts = clean.split(/\s+/).filter((w) => w.length >= 3);
+    return parts.some((w) => msgLower.includes(w));
+  });
+
+  const targetPer = rawPersonas.find((p) => {
+    if (!p.name) return false;
+    const nameLower = p.name.toLowerCase().trim();
+    const clean = nameLower.replace(/^dr\.\s*/i, '').trim();
+    if (msgLower.includes(nameLower) || (clean && msgLower.includes(clean))) return true;
+    const parts = clean.split(/\s+/).filter((w) => w.length >= 3);
+    return parts.some((w) => msgLower.includes(w));
+  });
+
+  const targetPat = rawPatients.find((p) => {
+    if (!p.name) return false;
+    const nameLower = p.name.toLowerCase().trim();
+    if (msgLower.includes(nameLower)) return true;
+    const parts = nameLower.split(/\s+/).filter((w) => w.length >= 3);
+    return parts.some((w) => msgLower.includes(w)) || (p.uhid && msgLower.includes(p.uhid.toLowerCase()));
+  });
+
+  let targetPromptNote = '';
+  if (targetDoc) {
+    targetPromptNote += `\n\nCRITICAL CONTEXT: THE USER IS ASKING ABOUT DOCTOR / CLINICAL SPECIALIST "${targetDoc.name}":
+- Full Name: ${targetDoc.name}
+- Specialty: ${targetDoc.specialty} (${targetDoc.qualifications || 'Consultant Physician'})
+- Department: ${targetDoc.department}
+- Duty Status: ${targetDoc.isOnDuty ? 'Currently ON DUTY' : 'Off Duty'}
+- Shift: ${targetDoc.shiftTiming || '09:00 AM - 05:00 PM'}
+- Fee: $${targetDoc.consultationFee || 150} | Rating: ⭐ ${targetDoc.rating || 4.9} / 5.0
+- Email: ${targetDoc.email}
+YOU MUST CONFIRM THAT ${targetDoc.name} IS A REGISTERED CREDENTIALED DOCTOR AT PULSECARE AND PROVIDE THEIR CLINICAL PROFILE. DO NOT SAY THEY ARE MISSING FROM PATIENTS LIST.\n\n`;
+  }
+
+  if (targetPer && (!targetDoc || targetPer.name.toLowerCase() !== targetDoc.name.toLowerCase().replace(/^dr\.\s*/i, ''))) {
+    targetPromptNote += `\n\nCRITICAL CONTEXT: THE USER IS ASKING ABOUT HOSPITAL STAFF PERSONA "${targetPer.name}":
+- Full Name: ${targetPer.name}
+- Role: ${(targetPer.role || 'STAFF').toUpperCase()} (${targetPer.title || 'Staff Specialist'})
+- Department: ${targetPer.department || 'Hospital Operations'}
+- Email: ${targetPer.email}
+YOU MUST CONFIRM THAT ${targetPer.name} IS AN ACTIVE STAFF MEMBER / PERSONA AT PULSECARE AND PROVIDE THEIR PROFILE.\n\n`;
+  }
+
+  if (targetPat) {
+    targetPromptNote += `\n\nCRITICAL CONTEXT: THE USER IS ASKING ABOUT REGISTERED PATIENT "${targetPat.name}":
+- Full Name: ${targetPat.name}
+- UHID: ${targetPat.uhid}
+- Age: ${targetPat.age} | Gender: ${targetPat.gender} | Blood: ${targetPat.bloodGroup}
+- Admission Status: ${targetPat.admissionStatus}
+- Allergies: ${(targetPat.allergies && targetPat.allergies.length > 0) ? targetPat.allergies.join(', ') : 'None reported (NKDA)'}
+- Attending Doctor: ${targetPat.doctorName || targetPat.attendingDoctor || 'Assigned Clinical Team'}
+YOU MUST CONFIRM THAT ${targetPat.name} IS A REGISTERED PATIENT IN THIS HOSPITAL AND PROVIDE THEIR DETAILS.\n\n`;
+  }
 
   // Construct comprehensive clinical and hospital context
   const systemPrompt = `You are PulseAI, an advanced real-time Clinical & Operational AI for PulseCare Enterprise Hospital Management System.
 Current Real-Time Hospital Knowledge:
+- Credentialed Doctors & Specialists Directory (${rawDoctors.length} doctors):
+${doctorsListString}
+
+- Hospital Staff & Leadership Personas (${rawPersonas.length} personas):
+${personasListString}
+
 - Registered Patients List (${rawPatients.length} active patients):
 ${patientsListString}
-
+${targetPromptNote}
 - Bed Fleet: ${hospitalContext?.bedsCount || '12'} beds total across ICU, CCU, Emergency, General Ward.
-- Doctors: ${hospitalContext?.doctorsCount || '6'} on-duty specialists across Cardiology, Trauma ER, Nephrology, Surgery.
+- Doctors on Duty: ${rawDoctors.filter((d) => d.isOnDuty).map((d) => d.name).join(', ') || 'Specialists on active shift'}.
 - Blood Bank: ${hospitalContext?.bloodUnits || '96'} units across 8 blood groups (O- is critically low at 4 units).
 - Pharmacy Formularies: ${hospitalContext?.medicinesCount || '12'} pharmaceuticals.
 - Emergency Codes: Active Code Blue crash team paging operations.
 
 INSTRUCTIONS:
-1. When asked about ANY patient (such as "who is JOHN", "tell me about Eleanor", "who is Omkumar"), refer directly to the Registered Patients List above and provide their exact full profile (Name, UHID, Age, Gender, Blood Group, Admission Status, Allergies, and Vitals).
-2. Answer BOTH hospital-specific questions and ANY general medical, scientific, operational, or everyday questions the user asks.
+1. When asked "who is [Person]" or inquiring about any individual:
+   - If they are a DOCTOR or MEDICAL SPECIALIST (such as Dr. Omkumar Rajput, Dr. Sarah Lin, Dr. Marcus Vance, etc.), present their medical specialty, department, duty status, shift timing, experience, and consultation fee.
+   - If they are a HOSPITAL STAFF MEMBER or PERSONA (such as Arthur Vance, Clara Hughes, Robert Tanaka, Chen Wei, etc.), present their role, department, title, email, and privileges.
+   - If they are a REGISTERED PATIENT (such as JOHN, Eleanor Harrison, Julian Sterling, Samuel Osei, Maya Linnea, etc.), present their UHID, demographics, admission status, allergies, and vitals.
+   - Never state that an individual does not exist without verifying Doctors, Staff Personas, AND Patients lists.
+2. Answer BOTH hospital-specific questions and ANY general medical, scientific, operational, pharmacology, diagnostic, or everyday questions the user asks with deep clinical expertise.
 3. If the user asks medical or diagnostic questions, provide evidence-based clinical guidance, differential diagnoses, or pharmacological cautions.
 4. Format responses cleanly with markdown bullet points, bold key terms, and emojis where appropriate.`;
 

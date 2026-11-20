@@ -9,7 +9,8 @@ import {
   EmergencyCase,
   BloodInventoryItem,
   EmergencyBroadcast,
-  AuditBlock
+  AuditBlock,
+  UserProfile
 } from '../types';
 
 export interface AISuggestion {
@@ -39,6 +40,7 @@ export interface AIChatMessage {
 export interface HospitalKnowledgeContext {
   patients: Patient[];
   doctors: Doctor[];
+  personas?: UserProfile[];
   beds: Bed[];
   medicines: Medicine[];
   labOrders: LabTestOrder[];
@@ -154,8 +156,78 @@ export function answerHospitalQuery(query: string, ctx: HospitalKnowledgeContext
   const id = `MSG-${Date.now()}`;
   const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  // 1. DIRECT PATIENT LOOKUP (Matches ANY patient in the database by full name, first name, or UHID)
-  // Handles: "who is JOHN", "John", "tell me about Eleanor", "Omkumar Rajput", "PC-2026-9266"
+  // 1. DIRECT DOCTOR / SPECIALIST LOOKUP (e.g. "who is omkumar ??", "Omkumar Rajput", "Dr. Sarah Lin")
+  const matchingDoc = ctx.doctors.find((d) => {
+    if (!d.name) return false;
+    const nameLower = d.name.toLowerCase().trim();
+    const cleanName = nameLower.replace(/^dr\.\s*/i, '').trim();
+    if (q.includes(nameLower) || (cleanName && q.includes(cleanName))) return true;
+    const words = cleanName.split(/\s+/).filter((w) => w.length >= 3);
+    return words.some((w) => q.includes(w));
+  });
+
+  if (matchingDoc) {
+    let text = `🩺 **Medical Specialist Dossier: ${matchingDoc.name}**\n\n`;
+    text += `• **Specialty & Qualifications**: **${matchingDoc.specialty}** (${matchingDoc.qualifications || 'Consultant Physician'})\n`;
+    text += `• **Department**: ${matchingDoc.department}\n`;
+    text += `• **Duty Status**: ${matchingDoc.isOnDuty ? '✅ **Currently On Duty**' : '⏳ Off Duty'}\n`;
+    text += `• **Assigned Shift**: ${matchingDoc.shiftTiming}\n`;
+    text += `• **Clinical Experience & Rating**: ${matchingDoc.experienceYears} Years • ⭐ ${matchingDoc.rating} / 5.0\n`;
+    text += `• **OPD Consultation Fee**: $${matchingDoc.consultationFee}\n`;
+    text += `• **Contact Info**: ${matchingDoc.email} • ${matchingDoc.phone}\n`;
+
+    return {
+      id,
+      sender: 'assistant',
+      text,
+      timestamp,
+      badges: [matchingDoc.name, matchingDoc.specialty, matchingDoc.isOnDuty ? 'On Duty' : 'Active Specialist'],
+      actionShortcut: {
+        label: `View in Doctor Directory`,
+        targetTab: 'core-doctors'
+      },
+      suggestions: [`Book appointment with ${matchingDoc.name}`, 'Check doctor schedule', 'Show hospital health audit']
+    };
+  }
+
+  // 2. DIRECT STAFF PERSONA LOOKUP (e.g. "Arthur Vance", "Clara Hughes", "Robert Tanaka", "Chen Wei")
+  if (ctx.personas && ctx.personas.length > 0) {
+    const matchingPersona = ctx.personas.find((p) => {
+      if (!p.name) return false;
+      const nameLower = p.name.toLowerCase().trim();
+      const cleanName = nameLower.replace(/^dr\.\s*/i, '').trim();
+      if (q.includes(nameLower) || (cleanName && q.includes(cleanName))) return true;
+      const words = cleanName.split(/\s+/).filter((w) => w.length >= 3);
+      return words.some((w) => q.includes(w));
+    });
+
+    if (matchingPersona) {
+      let text = `👤 **Hospital Staff & Leadership Profile: ${matchingPersona.name}**\n\n`;
+      text += `• **Role**: **${matchingPersona.role.toUpperCase()}** (${matchingPersona.title || 'Staff Specialist'})\n`;
+      text += `• **Department**: ${matchingPersona.department || 'Hospital Operations'}\n`;
+      text += `• **Official Email**: ${matchingPersona.email}\n`;
+      if (matchingPersona.licenseNumber) {
+        text += `• **Medical License / Reg**: ${matchingPersona.licenseNumber}\n`;
+      }
+      text += `• **Clinical Privileges**: ${matchingPersona.permissions?.join(', ') || 'Standard Clinical Access'}\n`;
+
+      return {
+        id,
+        sender: 'assistant',
+        text,
+        timestamp,
+        badges: [matchingPersona.name, matchingPersona.role.toUpperCase()],
+        actionShortcut: {
+          label: `Manage in Role Portal`,
+          targetTab: 'core-role-portal'
+        },
+        suggestions: [`Switch to ${matchingPersona.name}`, 'Show hospital health audit', 'Check ICU beds']
+      };
+    }
+  }
+
+  // 3. DIRECT PATIENT LOOKUP (Matches ANY patient in the database by full name, first name, or UHID)
+  // Handles: "who is JOHN", "John", "tell me about Eleanor", "PC-2026-9266"
   const matchingPatient = ctx.patients.find((p) => {
     if (!p.name) return false;
     const nameLower = p.name.toLowerCase().trim();
@@ -202,7 +274,7 @@ export function answerHospitalQuery(query: string, ctx: HospitalKnowledgeContext
     };
   }
 
-  // 2. Bed & ICU Ventilator Availability
+  // 4. Bed & ICU Ventilator Availability
   if (q.includes('bed') || q.includes('icu') || q.includes('ventilator') || q.includes('room') || q.includes('occupan')) {
     const totalBeds = ctx.beds.length;
     const availableBeds = ctx.beds.filter((b) => b.status === 'Available');
@@ -572,37 +644,130 @@ export async function queryRealTimeAICopilot(
     })
     .join('\n');
 
-  // Specific patient match check in query
+  // Full Doctors & Specialists List for Context
+  const doctorsList = ctx.doctors.map((d) => ({
+    name: d.name,
+    specialty: d.specialty,
+    department: d.department,
+    qualifications: d.qualifications || 'Consultant Physician',
+    isOnDuty: d.isOnDuty,
+    shiftTiming: d.shiftTiming,
+    consultationFee: d.consultationFee,
+    rating: d.rating,
+    experienceYears: d.experienceYears,
+    email: d.email,
+    phone: d.phone
+  }));
+
+  const doctorsListDetails = ctx.doctors
+    .map(
+      (d) =>
+        `• Doctor/Specialist: ${d.name} | Specialty: ${d.specialty} (${d.qualifications || 'Consultant'}) | Dept: ${d.department} | Duty: ${d.isOnDuty ? 'ON DUTY' : 'Off Duty'} | Shift: ${d.shiftTiming} | Exp: ${d.experienceYears}y | Rating: ⭐ ${d.rating}/5.0 | Fee: $${d.consultationFee} | Email: ${d.email}`
+    )
+    .join('\n');
+
+  // Full Staff Personas List for Context
+  const personasList = (ctx.personas || []).map((p) => ({
+    name: p.name,
+    role: p.role,
+    title: p.title,
+    department: p.department,
+    email: p.email,
+    licenseNumber: p.licenseNumber
+  }));
+
+  const personasListDetails = (ctx.personas || [])
+    .map(
+      (p) =>
+        `• Staff Persona: ${p.name} | Role: ${p.role.toUpperCase()} | Title: ${p.title || 'Staff Specialist'} | Dept: ${p.department || 'Operations'} | Email: ${p.email}${p.licenseNumber ? ` | License: ${p.licenseNumber}` : ''}`
+    )
+    .join('\n');
+
+  // Specific Entity Match in Query (Doctor, Staff Persona, or Patient)
+  const qLower = query.toLowerCase().trim();
+
+  // 1. Doctor Match (Matches "who is omkumar", "Dr. Sarah Lin", "Omkumar Rajput")
+  const targetDoctor = ctx.doctors.find((d) => {
+    if (!d.name) return false;
+    const nameLower = d.name.toLowerCase().trim();
+    const cleanName = nameLower.replace(/^dr\.\s*/i, '').trim();
+    if (qLower.includes(nameLower) || (cleanName && qLower.includes(cleanName))) return true;
+    const words = cleanName.split(/\s+/).filter((w) => w.length >= 3);
+    return words.some((w) => qLower.includes(w));
+  });
+
+  // 2. Staff Persona Match (Matches "Arthur Vance", "Robert Tanaka", "Chen Wei", etc.)
+  const targetPersona = (ctx.personas || []).find((p) => {
+    if (!p.name) return false;
+    const nameLower = p.name.toLowerCase().trim();
+    const cleanName = nameLower.replace(/^dr\.\s*/i, '').trim();
+    if (qLower.includes(nameLower) || (cleanName && qLower.includes(cleanName))) return true;
+    const words = cleanName.split(/\s+/).filter((w) => w.length >= 3);
+    return words.some((w) => qLower.includes(w));
+  });
+
+  // 3. Patient Match (Matches "who is JOHN", "Eleanor Harrison", "PC-2026-9266")
   const targetPatient = ctx.patients.find((p) => {
     if (!p.name) return false;
     const nameLower = p.name.toLowerCase().trim();
-    if (query.toLowerCase().includes(nameLower)) return true;
+    if (qLower.includes(nameLower)) return true;
     const words = nameLower.split(/\s+/).filter((w) => w.length >= 3);
-    return words.some((w) => query.toLowerCase().includes(w)) || (p.uhid && query.toLowerCase().includes(p.uhid.toLowerCase()));
+    return words.some((w) => qLower.includes(w)) || (p.uhid && qLower.includes(p.uhid.toLowerCase()));
   });
 
-  const targetPatientPrompt = targetPatient
-    ? `\n\nCRITICAL NOTE: THE USER IS SPECIFICALLY INQUIRING ABOUT PATIENT "${targetPatient.name}":
+  let targetEntityPrompt = '';
+  if (targetDoctor) {
+    targetEntityPrompt += `\n\nCRITICAL CONTEXT: THE USER IS SPECIFICALLY INQUIRING ABOUT DOCTOR / CLINICAL SPECIALIST "${targetDoctor.name}":
+- Full Name: ${targetDoctor.name}
+- Specialty & Qualifications: ${targetDoctor.specialty} (${targetDoctor.qualifications || 'Consultant Physician'})
+- Department: ${targetDoctor.department}
+- Duty Status: ${targetDoctor.isOnDuty ? 'Currently ON DUTY' : 'Off Duty'}
+- Assigned Shift: ${targetDoctor.shiftTiming}
+- Experience & Rating: ${targetDoctor.experienceYears} Years Experience | ⭐ ${targetDoctor.rating} / 5.0
+- Consultation Fee: $${targetDoctor.consultationFee}
+- Official Contact: ${targetDoctor.email} | ${targetDoctor.phone}
+YOU MUST CONFIRM THAT ${targetDoctor.name} IS A CREDENTIALED DOCTOR / MEDICAL CONSULTANT AT PULSECARE AND PROVIDE THEIR DETAILS. DO NOT SAY THEY ARE MISSING FROM PATIENTS LIST.\n\n`;
+  }
+
+  if (targetPersona && (!targetDoctor || targetPersona.name.toLowerCase() !== targetDoctor.name.toLowerCase().replace(/^dr\.\s*/i, ''))) {
+    targetEntityPrompt += `\n\nCRITICAL CONTEXT: THE USER IS SPECIFICALLY INQUIRING ABOUT HOSPITAL STAFF / LEADERSHIP PERSONA "${targetPersona.name}":
+- Full Name: ${targetPersona.name}
+- Role: ${targetPersona.role.toUpperCase()} (${targetPersona.title || 'Staff Specialist'})
+- Department: ${targetPersona.department || 'Hospital Operations'}
+- Email: ${targetPersona.email}
+${targetPersona.licenseNumber ? `- Medical License: ${targetPersona.licenseNumber}` : ''}
+YOU MUST CONFIRM THAT ${targetPersona.name} IS AN ACTIVE STAFF MEMBER / PERSONA AT PULSECARE AND PROVIDE THEIR DETAILS.\n\n`;
+  }
+
+  if (targetPatient) {
+    const v = targetPatient.vitalsHistory?.[0];
+    const vStr = v
+      ? `HR ${v.heartRate} bpm, BP ${v.systolicBp}/${v.diastolicBp}, SpO2 ${v.spO2}%, Temp ${v.temperature}°C, Resp ${v.respiratoryRate}/min`
+      : 'Stable baseline vitals';
+    targetEntityPrompt += `\n\nCRITICAL CONTEXT: THE USER IS SPECIFICALLY INQUIRING ABOUT REGISTERED PATIENT "${targetPatient.name}":
 - Full Name: ${targetPatient.name}
 - UHID: ${targetPatient.uhid}
 - Age: ${targetPatient.age} years old | Gender: ${targetPatient.gender} | Blood Group: ${targetPatient.bloodGroup}
 - Admission Status: ${targetPatient.admissionStatus}
-- Allergies: ${targetPatient.allergies?.length ? targetPatient.allergies.join(', ') : 'None reported (NKDA)'}
+- Allergies: ${targetPatient.allergies?.length ? targetPatient.allergies.join(', ') : 'No known drug allergies (NKDA)'}
 - Diagnosis / Notes: ${targetPatient.chronicConditions?.join(', ') || 'General Consultation'}
-- Vitals: ${
-        targetPatient.vitalsHistory?.[0]
-          ? `HR ${targetPatient.vitalsHistory[0].heartRate} bpm, BP ${targetPatient.vitalsHistory[0].systolicBp}/${targetPatient.vitalsHistory[0].diastolicBp}, SpO2 ${targetPatient.vitalsHistory[0].spO2}%, Resp ${targetPatient.vitalsHistory[0].respiratoryRate}/min`
-          : 'Normal'
-      }
-- Attending: ${ctx.doctors.find((d) => d.id === targetPatient.assignedDoctorId)?.name || 'Arthur Vance, MHA / Assigned Staff'}
-YOU MUST STATE THAT ${targetPatient.name} IS A REGISTERED PATIENT IN THIS HOSPITAL AND PROVIDE THEIR DETAILS.\n\n`
-    : '';
+- Vitals: ${vStr}
+- Attending Doctor: ${ctx.doctors.find((d) => d.id === targetPatient.assignedDoctorId)?.name || 'Dr. Sarah Lin, MD / Assigned Staff'}
+YOU MUST CONFIRM THAT ${targetPatient.name} IS A REGISTERED PATIENT IN THIS HOSPITAL AND PROVIDE THEIR COMPLETE EHR DETAILS.\n\n`;
+  }
 
   const systemPrompt = `You are PulseAI, the real-time Chief Clinical & Operational Medical Intelligence AI for PulseCare Enterprise Hospital Management System.
 You have omniscient, real-time knowledge of all active systems in this hospital:
+
+- Credentialed Doctors & Medical Specialists (${ctx.doctors.length} doctors):
+${doctorsListDetails}
+
+- Hospital Staff & Leadership Personas (${(ctx.personas || []).length} personas):
+${personasListDetails}
+
 - Active Registered Patients in Database (${patientsCount} patients):
 ${patientsListDetails}
-${targetPatientPrompt}
+${targetEntityPrompt}
 - ICU & Bed Fleet: ${bedsCount} total beds (${availableBeds.length} available). Available ICU beds with mechanical ventilators: ${
     icuVentilatorBeds.map((b) => b.bedNumber).join(', ') || 'None currently available'
   }.
@@ -616,7 +781,11 @@ ${targetPatientPrompt}
 - Emergency Protocols: ${activeCodes.length > 0 ? activeCodes.map((c) => `${c.type} at ${c.location}`).join(', ') : 'All clear / Standby'}.
 
 INSTRUCTIONS:
-1. When asked about ANY patient (such as "who is JOHN", "tell me about Eleanor", "who is Omkumar"), refer directly to the Registered Patients list above and provide their exact full profile. Never claim a registered patient does not exist.
+1. When asked "who is [Person]" or inquiring about an individual:
+   - Check if they are a DOCTOR or MEDICAL SPECIALIST (e.g. Dr. Omkumar Rajput, Dr. Sarah Lin, Dr. Marcus Vance, etc.). If so, present their medical specialty, department, duty status, shift timing, experience, and consultation fee.
+   - Check if they are HOSPITAL STAFF or LEADERSHIP PERSONA (e.g. Arthur Vance, Clara Hughes, Robert Tanaka, Chen Wei, etc.). If so, present their role, department, title, email, and privileges.
+   - Check if they are a REGISTERED PATIENT (e.g. JOHN, Eleanor Harrison, Julian Sterling, Samuel Osei, Maya Linnea, etc.). If so, present their UHID, demographics, admission status, allergies, diagnosis, and live vitals telemetry.
+   - Never say an individual does not exist without verifying Doctors, Staff Personas, AND Patients lists.
 2. Provide comprehensive, accurate, and professional answers to ANY questions the user asks — including clinical diagnostics, pharmacology, medical conditions, operational decisions, or general medical science.
 3. If the user asks general medical, health, scientific, or everyday questions, answer with evidence-based clinical accuracy.
 4. Format using clean Markdown with bold headers and bullet points.`;
@@ -712,6 +881,8 @@ INSTRUCTIONS:
           patientsList,
           bedsCount,
           doctorsCount: ctx.doctors.length,
+          doctorsList,
+          personasList,
           bloodUnits: totalBloodUnits,
           medicinesCount: ctx.medicines.length
         }

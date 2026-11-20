@@ -36,6 +36,7 @@ export const AICopilotView: React.FC = () => {
   const {
     patients,
     doctors,
+    personas,
     beds,
     medicines,
     labOrders,
@@ -85,6 +86,7 @@ export const AICopilotView: React.FC = () => {
   const knowledgeContext = {
     patients,
     doctors,
+    personas,
     beds,
     medicines,
     labOrders,

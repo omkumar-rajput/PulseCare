@@ -19,6 +19,24 @@
       "isSystemDefault": true
     },
     {
+      "id": "DOC-OMK",
+      "name": "Omkumar Rajput",
+      "role": "doctor",
+      "title": "Consultant Physician",
+      "email": "omkumar.rajput@pulsecare.health",
+      "avatar": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=250",
+      "department": "Cardiovascular Sciences",
+      "licenseNumber": "MD-99412-CARD",
+      "permissions": [
+        "WRITE_PRESCRIPTION",
+        "VIEW_EHR",
+        "ORDER_LABS",
+        "CDSS_ACCESS",
+        "TELEMEDICINE"
+      ],
+      "isSystemDefault": true
+    },
+    {
       "id": "DOC-01",
       "name": "Dr. Sarah Lin, MD, FACC",
       "role": "doctor",
@@ -117,6 +135,99 @@
     }
   ],
   "patients": [
+    {
+      "id": "PAT-JOHN",
+      "uhid": "PC-2026-9266",
+      "name": "JOHN",
+      "age": 22,
+      "gender": "Male",
+      "bloodGroup": "AB+",
+      "phone": "+1 (555) 444-9266",
+      "email": "john.patient@pulsecare.health",
+      "address": "42 Broadway Suite, Metro District",
+      "emergencyContact": {
+        "name": "Robert Vance",
+        "relationship": "Guardian",
+        "phone": "+1 (555) 444-9900"
+      },
+      "allergies": [
+        "Grains"
+      ],
+      "chronicConditions": [
+        "General Consultation",
+        "Seasonal Allergies"
+      ],
+      "admissionStatus": "Outpatient",
+      "assignedDoctorId": "DOC-OMK",
+      "vitalsHistory": [
+        {
+          "id": "VIT-JOHN-01",
+          "timestamp": "2026-11-20T06:00:00Z",
+          "heartRate": 76,
+          "systolicBp": 120,
+          "diastolicBp": 80,
+          "respiratoryRate": 16,
+          "spO2": 98,
+          "temperature": 37,
+          "avpu": "Alert"
+        }
+      ],
+      "medicalTimeline": [
+        {
+          "id": "TL-JOHN-01",
+          "date": "2026-11-20",
+          "title": "Patient Intake & Registration",
+          "type": "admission",
+          "notes": "Registered in PulseCare HMS via Admin Portal. Attending: Arthur Vance, MHA.",
+          "doctorName": "Dr. Omkumar Rajput, MD"
+        }
+      ]
+    },
+    {
+      "id": "PAT-OMK",
+      "uhid": "PC-2026-7064",
+      "name": "Omkumar Rajput",
+      "age": 29,
+      "gender": "Male",
+      "bloodGroup": "O+",
+      "phone": "+1 (555) 777-8899",
+      "email": "omkumar.rajput@pulsecare.health",
+      "address": "Executive Clinical Quarters, Sector 2",
+      "emergencyContact": {
+        "name": "Family Contact",
+        "relationship": "Family",
+        "phone": "+1 (555) 777-0011"
+      },
+      "allergies": [],
+      "chronicConditions": [
+        "Consultant Staff Health Baseline"
+      ],
+      "admissionStatus": "Outpatient",
+      "assignedDoctorId": "DOC-01",
+      "vitalsHistory": [
+        {
+          "id": "VIT-OMK-01",
+          "timestamp": "2026-11-20T06:00:00Z",
+          "heartRate": 72,
+          "systolicBp": 118,
+          "diastolicBp": 78,
+          "respiratoryRate": 15,
+          "spO2": 99,
+          "temperature": 36.8,
+          "avpu": "Alert"
+        }
+      ],
+      "medicalTimeline": [
+        {
+          "id": "TL-OMK-01",
+          "date": "2026-11-20",
+          "title": "Staff Health Intake Record",
+          "type": "admission",
+          "notes": "Verified clinical staff registry record.",
+          "doctorName": "Dr. Sarah Lin, MD, FACC"
+        }
+      ]
+    },
     {
       "id": "PAT-101",
       "uhid": "PC-2026-8812",
@@ -331,6 +442,28 @@
     }
   ],
   "doctors": [
+    {
+      "id": "DOC-OMK",
+      "name": "Dr. Omkumar Rajput, MD",
+      "specialty": "Cardiovascular Sciences",
+      "department": "Cardiovascular Sciences",
+      "qualifications": "MBBS, MD, FACC - Senior Consultant Physician",
+      "experienceYears": 8,
+      "phone": "+1 (555) 777-8899",
+      "email": "omkumar.rajput@pulsecare.health",
+      "consultationFee": 150,
+      "rating": 5,
+      "availableDays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri"
+      ],
+      "shiftTiming": "09:00 AM - 05:00 PM",
+      "isOnDuty": true,
+      "avatar": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=250"
+    },
     {
       "id": "DOC-01",
       "name": "Dr. Sarah Lin, MD, FACC",
@@ -729,5 +862,5 @@
   ],
   "auditLedger": [],
   "prescriptions": [],
-  "lastUpdated": "2026-11-19T18:17:40.237Z"
+  "lastUpdated": "2026-11-20T02:19:11.481Z"
 }
