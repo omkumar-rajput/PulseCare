@@ -220,7 +220,10 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return saved ? JSON.parse(saved) : INITIAL_PATIENTS;
   });
 
-  const [doctors, setDoctors] = useState<Doctor[]>(INITIAL_DOCTORS);
+  const [doctors, setDoctors] = useState<Doctor[]>(() => {
+    const saved = localStorage.getItem('pc_doctors');
+    return saved ? JSON.parse(saved) : INITIAL_DOCTORS;
+  });
 
   const [beds, setBeds] = useState<Bed[]>(() => {
     const saved = localStorage.getItem('pc_beds');
@@ -298,6 +301,108 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.setItem('pc_appointments', JSON.stringify(appointments));
   }, [appointments]);
 
+  useEffect(() => {
+    localStorage.setItem('pc_doctors', JSON.stringify(doctors));
+  }, [doctors]);
+
+  // Cross-module sync: Synchronize doctor & patient personas into doctors & patients lists
+  useEffect(() => {
+    // 1. Ensure any doctor persona is registered in the Doctor Directory
+    const doctorPersonas = personas.filter((p) => p.role === 'doctor');
+    if (doctorPersonas.length > 0) {
+      setDoctors((prevDocs) => {
+        let updated = [...prevDocs];
+        let hasChanges = false;
+        doctorPersonas.forEach((dp) => {
+          const docName = dp.name.startsWith('Dr.') ? dp.name : `Dr. ${dp.name}`;
+          const exists = updated.some(
+            (d) => d.id === `DOC-${dp.id}` || d.id === dp.id || d.name.toLowerCase() === docName.toLowerCase()
+          );
+          if (!exists) {
+            updated.push({
+              id: `DOC-${dp.id}`,
+              name: docName,
+              specialty: dp.department || dp.title || 'General Medicine',
+              department: dp.department || 'General Medicine',
+              qualifications: dp.title || 'MBBS, MD',
+              experienceYears: 8,
+              phone: '+1 (555) 234-5678',
+              email: dp.email,
+              consultationFee: 120,
+              rating: 4.9,
+              availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+              shiftTiming: '09:00 AM - 05:00 PM',
+              isOnDuty: true,
+              avatar: dp.avatar,
+            });
+            hasChanges = true;
+          }
+        });
+        return hasChanges ? updated : prevDocs;
+      });
+    }
+
+    // 2. Ensure any patient persona is registered in the Patient Registry
+    const patientPersonas = personas.filter((p) => p.role === 'patient');
+    if (patientPersonas.length > 0) {
+      setPatients((prevPats) => {
+        let updated = [...prevPats];
+        let hasChanges = false;
+        patientPersonas.forEach((pp) => {
+          const exists = updated.some(
+            (pat) => pat.id === `PAT-${pp.id}` || pat.id === pp.id || pat.name.toLowerCase() === pp.name.toLowerCase()
+          );
+          if (!exists) {
+            updated.unshift({
+              id: `PAT-${pp.id}`,
+              uhid: `PC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+              name: pp.name,
+              age: 28,
+              gender: 'Male',
+              bloodGroup: 'O+',
+              phone: '+1 (555) 345-6789',
+              email: pp.email,
+              address: 'Registered via Persona Intake Portal',
+              emergencyContact: {
+                name: 'Family Contact',
+                relationship: 'Spouse',
+                phone: '+1 (555) 999-1122',
+              },
+              allergies: [],
+              chronicConditions: [pp.title || 'General Consultation'],
+              admissionStatus: 'Outpatient',
+              vitalsHistory: [
+                {
+                  id: `VIT-${Date.now()}`,
+                  timestamp: new Date().toISOString(),
+                  heartRate: 74,
+                  systolicBp: 120,
+                  diastolicBp: 80,
+                  respiratoryRate: 16,
+                  spO2: 98,
+                  temperature: 37.0,
+                  avpu: 'Alert',
+                },
+              ],
+              medicalTimeline: [
+                {
+                  id: `TL-${Date.now()}`,
+                  date: new Date().toISOString().split('T')[0],
+                  title: 'Patient Account Registered',
+                  type: 'admission',
+                  notes: 'Registered as verified patient in PulseCare OS.',
+                  doctorName: 'Dr. Sarah Lin',
+                },
+              ],
+            });
+            hasChanges = true;
+          }
+        });
+        return hasChanges ? updated : prevPats;
+      });
+    }
+  }, [personas]);
+
   // -------------------------------------------------------------
   // CONTINUOUS LIVE-SYNC AUTO-POLLING ENGINE (EVERY 3 SECONDS)
   // -------------------------------------------------------------
@@ -315,6 +420,7 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         if (data.personas && data.personas.length > 0) setPersonas(data.personas);
         if (data.patients && data.patients.length > 0) setPatients(data.patients);
+        if (data.doctors && data.doctors.length > 0) setDoctors(data.doctors);
         if (data.beds && data.beds.length > 0) setBeds(data.beds);
         if (data.medicines && data.medicines.length > 0) setMedicines(data.medicines);
         if (data.invoices && data.invoices.length > 0) setInvoices(data.invoices);
@@ -397,6 +503,79 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     setPersonas((prev) => [...prev, created]);
+
+    // Cross-module immediate local registration
+    if (created.role === 'doctor') {
+      const docName = created.name.startsWith('Dr.') ? created.name : `Dr. ${created.name}`;
+      const newDoc: Doctor = {
+        id: `DOC-${created.id}`,
+        name: docName,
+        specialty: created.department || created.title || 'General Medicine',
+        department: created.department || 'General Medicine',
+        qualifications: created.title || 'MBBS, MD',
+        experienceYears: 8,
+        phone: '+1 (555) 234-5678',
+        email: created.email,
+        consultationFee: 120,
+        rating: 4.9,
+        availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+        shiftTiming: '09:00 AM - 05:00 PM',
+        isOnDuty: true,
+        avatar: created.avatar,
+      };
+      setDoctors((prev) => {
+        if (prev.some((d) => d.id === newDoc.id || d.name.toLowerCase() === docName.toLowerCase())) return prev;
+        return [...prev, newDoc];
+      });
+    } else if (created.role === 'patient') {
+      const newPat: Patient = {
+        id: `PAT-${created.id}`,
+        uhid: `PC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+        name: created.name,
+        age: 28,
+        gender: 'Male',
+        bloodGroup: 'O+',
+        phone: '+1 (555) 345-6789',
+        email: created.email,
+        address: 'Registered via Persona Intake Portal',
+        emergencyContact: {
+          name: 'Family Contact',
+          relationship: 'Spouse',
+          phone: '+1 (555) 999-1122',
+        },
+        allergies: [],
+        chronicConditions: [created.title || 'General Consultation'],
+        admissionStatus: 'Outpatient',
+        vitalsHistory: [
+          {
+            id: `VIT-${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            heartRate: 74,
+            systolicBp: 120,
+            diastolicBp: 80,
+            respiratoryRate: 16,
+            spO2: 98,
+            temperature: 37.0,
+            avpu: 'Alert',
+          },
+        ],
+        medicalTimeline: [
+          {
+            id: `TL-${Date.now()}`,
+            date: new Date().toISOString().split('T')[0],
+            title: 'Patient Account Registered',
+            type: 'admission',
+            notes: 'Registered as verified patient in PulseCare OS.',
+            doctorName: 'Dr. Sarah Lin',
+          },
+        ],
+      };
+      setPatients((prev) => {
+        if (prev.some((p) => p.name.toLowerCase() === created.name.toLowerCase())) return prev;
+        return [newPat, ...prev];
+      });
+    }
+
     recordAuditLog('UPDATE_EHR', created.id, 'Patient', `Created new clinical persona: ${created.name} (${created.role})`);
     addNotification('success', 'Persona Created', `${created.name} (${created.title}) added to staff roster.`);
     return created;
@@ -418,6 +597,14 @@ export const HospitalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     setPersonas((prev) => prev.filter((p) => p.id !== id));
+
+    // Cross-module cleanup
+    if (target.role === 'doctor') {
+      setDoctors((prev) => prev.filter((d) => d.id !== `DOC-${id}` && d.name !== target.name && d.name !== `Dr. ${target.name}`));
+    } else if (target.role === 'patient') {
+      setPatients((prev) => prev.filter((p) => p.id !== `PAT-${id}` && p.name !== target.name));
+    }
+
     recordAuditLog('UPDATE_EHR', id, 'Patient', `Deleted persona: ${target.name} (${target.role})`);
     addNotification('info', 'Persona Deleted', `${target.name} removed from hospital roster.`);
     return true;

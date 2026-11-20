@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useHospital } from '../../context/HospitalContext';
 import {
+  queryRealTimeAICopilot,
   answerHospitalQuery,
   generateProactiveSuggestions,
   AIChatMessage,
@@ -24,7 +25,11 @@ import {
   Pill,
   Users,
   ShieldAlert,
-  HelpCircle
+  HelpCircle,
+  Key,
+  Settings2,
+  ExternalLink,
+  Check
 } from 'lucide-react';
 
 export const AICopilotView: React.FC = () => {
@@ -44,14 +49,23 @@ export const AICopilotView: React.FC = () => {
     addNotification
   } = useHospital();
 
+  const [aiProvider, setAiProvider] = useState<'free' | 'gemini' | 'openai'>(() => {
+    return (localStorage.getItem('pc_ai_provider') as any) || 'free';
+  });
+  const [apiKey, setApiKey] = useState<string>(() => {
+    return localStorage.getItem('pc_ai_key') || '';
+  });
+  const [tempKey, setTempKey] = useState(apiKey);
+  const [showConfig, setShowConfig] = useState(false);
+
   const [inputQuery, setInputQuery] = useState('');
   const [messages, setMessages] = useState<AIChatMessage[]>([
     {
       id: 'welcome',
       sender: 'assistant',
-      text: `👋 **Welcome to PulseAI Clinical Copilot & Omniscient Hospital Assistant!**\n\nI am continuously synced with the live hospital database. I monitor all **${patients.length} registered patients**, **${beds.length} beds**, **${medicines.length} pharmaceuticals**, **8 blood reserve groups**, and **${doctors.length} specialists**.\n\nAsk me any operational, diagnostic, or clinical questions, or tap any suggestion chip below to begin.`,
+      text: `👋 **Welcome to PulseAI Real-Time Clinical Copilot & Omniscient Assistant!**\n\nI am continuously synchronized with the live hospital database. I monitor all **${patients.length} registered patients**, **${beds.length} beds**, **${medicines.length} pharmaceuticals**, **8 blood groups**, and **${doctors.length} specialists**.\n\nYou can ask me ANY question — both live hospital telemetry inquiries and open-ended medical, diagnostic, pharmacological, or general questions.\n\n*Click the 🔑 API Settings button in the chat header to link your Google Gemini or OpenAI key, or use the Free Cloud AI.*`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      badges: ['System Online', 'Zero-Latency Telemetry', 'Full-Stack Connected'],
+      badges: ['Real-Time AI Active', 'Zero-Latency Telemetry', 'Free Cloud Ready'],
       suggestions: [
         'Run hospital health check',
         'Which ICU beds have ventilators?',
@@ -106,9 +120,17 @@ export const AICopilotView: React.FC = () => {
     window.speechSynthesis.speak(utterance);
   };
 
-  const handleSendMessage = (textToSend?: string) => {
+  const handleSaveConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    setApiKey(tempKey);
+    localStorage.setItem('pc_ai_key', tempKey);
+    localStorage.setItem('pc_ai_provider', aiProvider);
+    setShowConfig(false);
+  };
+
+  const handleSendMessage = async (textToSend?: string) => {
     const query = textToSend || inputQuery;
-    if (!query.trim()) return;
+    if (!query.trim() || isTyping) return;
 
     const userMsg: AIChatMessage = {
       id: `USR-${Date.now()}`,
@@ -121,13 +143,27 @@ export const AICopilotView: React.FC = () => {
     if (!textToSend) setInputQuery('');
     setIsTyping(true);
 
-    // Simulate smart cognitive processing
-    setTimeout(() => {
-      const response = answerHospitalQuery(query, knowledgeContext);
+    const historyForPrompt = messages.slice(-6).map((m) => ({
+      role: m.sender === 'user' ? ('user' as const) : ('assistant' as const),
+      content: m.text
+    }));
+
+    try {
+      const response = await queryRealTimeAICopilot(
+        query,
+        historyForPrompt,
+        knowledgeContext,
+        { provider: aiProvider, apiKey }
+      );
       setMessages((prev) => [...prev, response]);
-      setIsTyping(false);
       speakText(response.text);
-    }, 450);
+    } catch (e) {
+      const fallback = answerHospitalQuery(query, knowledgeContext);
+      setMessages((prev) => [...prev, fallback]);
+      speakText(fallback.text);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   const handlePushNotificationToast = (s: AISuggestion) => {
@@ -316,16 +352,32 @@ export const AICopilotView: React.FC = () => {
                 <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                  PulseAI Omniscient Assistant
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <span>PulseAI Real-Time Assistant</span>
+                  <span className="rounded bg-teal-100 px-1.5 py-0.5 text-[10px] font-mono font-bold text-teal-800 dark:bg-teal-950 dark:text-teal-300 border border-teal-300 dark:border-teal-800">
+                    {aiProvider === 'gemini' ? '⚡ Gemini 1.5' : aiProvider === 'openai' ? '🤖 GPT-4o Mini' : '🌟 Free Cloud AI'}
+                  </span>
                 </h3>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Direct knowledge of EHR, Beds, Pharmacy, Blood Bank & Doctors
+                  Real-time knowledge of EHR, Beds, Pharmacy, Blood Bank & Doctors + Any Medical Query
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowConfig(!showConfig)}
+                title="AI Engine & API Key Settings"
+                className={`flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-all ${
+                  showConfig || apiKey
+                    ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300'
+                    : 'border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800'
+                }`}
+              >
+                <Key className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">API Settings</span>
+              </button>
+
               <button
                 onClick={() => setIsSpeechEnabled(!isSpeechEnabled)}
                 title={isSpeechEnabled ? 'Disable Voice Audio' : 'Enable Voice Audio'}
@@ -347,6 +399,102 @@ export const AICopilotView: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* Config Popover / Dropdown Bar */}
+          {showConfig && (
+            <div className="border-b border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/90 animate-in fade-in duration-150">
+              <form onSubmit={handleSaveConfig} className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-slate-100">
+                    <Settings2 className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                    <span>Real-Time AI Model & Key Configuration</span>
+                  </div>
+                  <span className="text-[11px] text-slate-500">Settings persist in your browser</span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setAiProvider('free')}
+                    className={`rounded-xl p-2 font-bold transition-all text-center ${
+                      aiProvider === 'free'
+                        ? 'bg-teal-600 text-white shadow-xs'
+                        : 'bg-white text-slate-700 dark:bg-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600'
+                    }`}
+                  >
+                    🌟 Free Cloud AI
+                    <div className="text-[10px] font-normal opacity-80">Zero Config / Built-in</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAiProvider('gemini')}
+                    className={`rounded-xl p-2 font-bold transition-all text-center ${
+                      aiProvider === 'gemini'
+                        ? 'bg-teal-600 text-white shadow-xs'
+                        : 'bg-white text-slate-700 dark:bg-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600'
+                    }`}
+                  >
+                    ⚡ Google Gemini
+                    <div className="text-[10px] font-normal opacity-80">1.5 / 2.0 Flash API</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAiProvider('openai')}
+                    className={`rounded-xl p-2 font-bold transition-all text-center ${
+                      aiProvider === 'openai'
+                        ? 'bg-teal-600 text-white shadow-xs'
+                        : 'bg-white text-slate-700 dark:bg-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600'
+                    }`}
+                  >
+                    🤖 OpenAI
+                    <div className="text-[10px] font-normal opacity-80">GPT-4o Mini API</div>
+                  </button>
+                </div>
+
+                {aiProvider !== 'free' && (
+                  <div>
+                    <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 mb-1">
+                      <span>{aiProvider === 'gemini' ? 'Enter Google Gemini API Key' : 'Enter OpenAI API Key'}</span>
+                      {aiProvider === 'gemini' && (
+                        <a
+                          href="https://aistudio.google.com/app/apikey"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1 text-teal-600 hover:underline dark:text-teal-400"
+                        >
+                          <span>Get Free Gemini Key (Google AI Studio)</span>
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                    <input
+                      type="password"
+                      value={tempKey}
+                      onChange={(e) => setTempKey(e.target.value)}
+                      placeholder={aiProvider === 'gemini' ? 'AIzaSy...' : 'sk-...'}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-white font-mono"
+                    />
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowConfig(false)}
+                    className="rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-teal-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-teal-700 shadow-xs"
+                  >
+                    Save & Activate
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
 
           {/* Chat Messages Stream */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">

@@ -49,6 +49,76 @@ app.post('/api/personas', (req, res) => {
   };
 
   db.insert('personas', newPersona);
+
+  // Cross-module sync: Automatically register doctor personas into Doctors Roster
+  if (role === 'doctor') {
+    const doctorName = name.startsWith('Dr.') ? name : `Dr. ${name}`;
+    const newDoctor = {
+      id: `DOC-${newPersona.id}`,
+      name: doctorName,
+      specialty: department || title || 'General Medicine',
+      department: department || 'General Medicine',
+      qualifications: title || 'MBBS, MD',
+      experienceYears: 8,
+      phone: '+1 (555) 234-5678',
+      email: newPersona.email,
+      consultationFee: 120,
+      rating: 4.9,
+      availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+      shiftTiming: '09:00 AM - 05:00 PM',
+      isOnDuty: true,
+      avatar: newPersona.avatar,
+      personaId: newPersona.id,
+    };
+    db.insert('doctors', newDoctor);
+  } else if (role === 'patient') {
+    // Cross-module sync: Automatically register patient personas into Patient Registry
+    const newPatient = {
+      id: `PAT-${newPersona.id}`,
+      uhid: `PC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      name: newPersona.name,
+      age: 29,
+      gender: 'Male',
+      bloodGroup: 'O+',
+      phone: '+1 (555) 345-6789',
+      email: newPersona.email,
+      address: 'Registered via Persona Intake Portal',
+      emergencyContact: {
+        name: 'Family Contact',
+        relationship: 'Spouse',
+        phone: '+1 (555) 999-1122',
+      },
+      allergies: [],
+      chronicConditions: [newPersona.title || 'General Checkup'],
+      admissionStatus: 'Outpatient',
+      vitalsHistory: [
+        {
+          id: `VIT-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          heartRate: 74,
+          systolicBp: 120,
+          diastolicBp: 80,
+          respiratoryRate: 16,
+          spO2: 98,
+          temperature: 37.0,
+          avpu: 'Alert',
+        },
+      ],
+      medicalTimeline: [
+        {
+          id: `TL-${Date.now()}`,
+          date: new Date().toISOString().split('T')[0],
+          title: 'Patient Account Registered',
+          type: 'admission',
+          notes: 'Registered as verified patient in PulseCare OS.',
+          doctorName: 'Dr. Sarah Lin',
+        },
+      ],
+      personaId: newPersona.id,
+    };
+    db.insert('patients', newPatient);
+  }
+
   res.status(201).json(newPersona);
 });
 
@@ -69,6 +139,20 @@ app.delete('/api/personas/:id', (req, res) => {
     return res.status(403).json({ error: 'Security constraint: The primary root administrator cannot be deleted.' });
   }
   db.delete('personas', req.params.id);
+
+  // Cross-module cleanup: also remove synced doctor or patient
+  const doctors = db.get('doctors') || [];
+  const matchingDoc = doctors.find((d) => d.personaId === req.params.id || d.id === `DOC-${req.params.id}`);
+  if (matchingDoc) {
+    db.delete('doctors', matchingDoc.id);
+  }
+
+  const patients = db.get('patients') || [];
+  const matchingPat = patients.find((p) => p.personaId === req.params.id || p.id === `PAT-${req.params.id}`);
+  if (matchingPat) {
+    db.delete('patients', matchingPat.id);
+  }
+
   res.json({ success: true, message: `Persona ${persona.name} deleted successfully.` });
 });
 
@@ -150,10 +234,32 @@ app.get('/api/doctors', (req, res) => {
   res.json(db.get('doctors'));
 });
 
+app.post('/api/doctors', (req, res) => {
+  const dData = req.body;
+  const newDoctor = {
+    ...dData,
+    id: dData.id || `DOC-${Date.now().toString().slice(-4)}`,
+    experienceYears: dData.experienceYears || 8,
+    rating: dData.rating || 4.9,
+    availableDays: dData.availableDays || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+    shiftTiming: dData.shiftTiming || '09:00 AM - 05:00 PM',
+    isOnDuty: dData.isOnDuty !== undefined ? dData.isOnDuty : true,
+    avatar: dData.avatar || 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=250',
+  };
+  db.insert('doctors', newDoctor);
+  res.status(201).json(newDoctor);
+});
+
 app.put('/api/doctors/:id', (req, res) => {
   const updated = db.update('doctors', req.params.id, req.body);
   if (!updated) return res.status(404).json({ error: 'Doctor not found' });
   res.json(updated);
+});
+
+app.delete('/api/doctors/:id', (req, res) => {
+  const success = db.delete('doctors', req.params.id);
+  if (!success) return res.status(404).json({ error: 'Doctor not found' });
+  res.json({ success: true, message: 'Doctor deleted successfully.' });
 });
 
 // -------------------------------------------------------------
@@ -331,6 +437,137 @@ app.get('/api/sync/live-state', (req, res) => {
     appointments: db.get('appointments'),
     bloodBank: db.get('bloodBank'),
     emergencyBroadcasts: db.get('emergencyBroadcasts'),
+  });
+});
+
+// -------------------------------------------------------------
+// 10. REAL-TIME AI CHATBOT API (FREE PUBLIC LLM + GEMINI/OPENAI KEY)
+// -------------------------------------------------------------
+app.post('/api/ai/chat', async (req, res) => {
+  const { message, history, provider, apiKey, hospitalContext } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: 'Message is required' });
+  }
+
+  // Construct comprehensive clinical and hospital context
+  const systemPrompt = `You are PulseAI, an advanced real-time Clinical & Operational AI for PulseCare Enterprise Hospital Management System.
+Current Real-Time Hospital Knowledge:
+- Active Patients: ${hospitalContext?.patientsCount || '6'} registered inpatients & outpatients (e.g. Eleanor Harrison in ICU Bed 101, etc.).
+- Bed Fleet: ${hospitalContext?.bedsCount || '12'} beds total across ICU, CCU, Emergency, General Ward.
+- Doctors: ${hospitalContext?.doctorsCount || '6'} on-duty specialists across Cardiology, Trauma ER, Nephrology, Surgery.
+- Blood Bank: ${hospitalContext?.bloodUnits || '96'} units across 8 blood groups (O- is critically low at 4 units).
+- Pharmacy Formularies: ${hospitalContext?.medicinesCount || '12'} pharmaceuticals.
+- Emergency Codes: Active Code Blue crash team paging operations.
+
+INSTRUCTIONS:
+1. Provide accurate, helpful, and empathetic answers to BOTH hospital-specific questions and ANY general medical, scientific, operational, or everyday questions the user asks.
+2. If the user asks about patients, beds, doctors, appointments, or blood bank, reference the live hospital context with specific numbers and actionable steps.
+3. If the user asks medical or diagnostic questions, provide evidence-based clinical guidance, differential diagnoses, or pharmacological cautions.
+4. Format responses cleanly with markdown bullet points, bold key terms, and emojis where appropriate.`;
+
+  // 1. Google Gemini API (If user provided Gemini Key)
+  if (provider === 'gemini' && apiKey) {
+    try {
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const contents = [
+        {
+          role: 'user',
+          parts: [{ text: `${systemPrompt}\n\nUser Question: ${message}` }]
+        }
+      ];
+
+      const resp = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents })
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (replyText) {
+          return res.json({ text: replyText, source: 'gemini' });
+        }
+      }
+    } catch (err) {
+      console.error('Gemini API call failed:', err.message);
+    }
+  }
+
+  // 2. OpenAI API (If user provided OpenAI Key)
+  if (provider === 'openai' && apiKey) {
+    try {
+      const openaiUrl = 'https://api.openai.com/v1/chat/completions';
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        ...(history || []).slice(-6),
+        { role: 'user', content: message }
+      ];
+
+      const resp = await fetch(openaiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages,
+          max_tokens: 800
+        })
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        const replyText = data.choices?.[0]?.message?.content;
+        if (replyText) {
+          return res.json({ text: replyText, source: 'openai' });
+        }
+      }
+    } catch (err) {
+      console.error('OpenAI API call failed:', err.message);
+    }
+  }
+
+  // 3. Free Public Cloud LLM (Pollinations.ai / Free AI - No API key needed)
+  try {
+    const pollinationsUrl = 'https://text.pollinations.ai/';
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...(history || []).slice(-4),
+      { role: 'user', content: message }
+    ];
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    const resp = await fetch(pollinationsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages,
+        model: 'openai',
+        seed: Math.floor(Math.random() * 1000)
+      }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    if (resp.ok) {
+      const replyText = await resp.text();
+      if (replyText && replyText.trim().length > 0) {
+        return res.json({ text: replyText.trim(), source: 'free-cloud-ai' });
+      }
+    }
+  } catch (err) {
+    // Timeout or network error; gracefully falls back to local clinical engine
+  }
+
+  // 4. Local Clinical Engine Signal
+  return res.json({
+    text: null,
+    source: 'local-fallback',
+    message: 'Using local intelligent clinical rules engine'
   });
 });
 

@@ -456,3 +456,211 @@ export function answerHospitalQuery(query: string, ctx: HospitalKnowledgeContext
     ]
   };
 }
+
+export interface AIConfig {
+  provider: 'free' | 'gemini' | 'openai';
+  apiKey?: string;
+}
+
+/**
+ * Real-Time Hybrid Cloud & Local Clinical AI Engine
+ * Supports Free Cloud LLM (no key needed) or User-Provided Gemini / OpenAI API Key.
+ * Injects entire live hospital context dynamically.
+ */
+export async function queryRealTimeAICopilot(
+  query: string,
+  history: { role: 'user' | 'assistant'; content: string }[],
+  ctx: HospitalKnowledgeContext,
+  config: AIConfig
+): Promise<AIChatMessage> {
+  const id = `MSG-${Date.now()}`;
+  const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  // 1. Prepare Hospital State Context Summary
+  const patientsCount = ctx.patients.length;
+  const bedsCount = ctx.beds.length;
+  const availableBeds = ctx.beds.filter((b) => b.status === 'Available');
+  const icuVentilatorBeds = ctx.beds.filter((b) => b.ward === 'ICU' && b.hasVentilator && b.status === 'Available');
+  const onDutyDoctors = ctx.doctors.filter((d) => d.isOnDuty);
+  const totalBloodUnits = ctx.bloodBank.reduce((a, b) => a + b.unitsAvailable, 0);
+  const oNeg = ctx.bloodBank.find((b) => b.bloodGroup === 'O-');
+  const lowMedicines = ctx.medicines.filter((m) => m.stockQuantity <= m.reorderLevel);
+  const activeCodes = ctx.emergencyBroadcasts.filter((c) => c.active);
+
+  const systemPrompt = `You are PulseAI, the real-time Chief Clinical & Operational Medical Intelligence AI for PulseCare Enterprise Hospital Management System.
+You have omniscient, real-time knowledge of all active systems in this hospital:
+- Registered Patients: ${patientsCount} patients (${ctx.patients.map((p) => `${p.name} [UHID: ${p.uhid}, Status: ${p.admissionStatus}, Blood: ${p.bloodGroup}]`).join(', ')}).
+- ICU & Bed Fleet: ${bedsCount} total beds (${availableBeds.length} available). Available ICU beds with mechanical ventilators: ${icuVentilatorBeds.map((b) => b.bedNumber).join(', ') || 'None currently available'}.
+- Doctors on Duty: ${onDutyDoctors.map((d) => `${d.name} (${d.specialty}, Shift: ${d.shiftTiming})`).join('; ')}.
+- Blood Bank Reserves: ${totalBloodUnits} total units across 8 groups. Universal O- Negative: ${oNeg ? `${oNeg.unitsAvailable} units (Safe threshold: ${oNeg.minSafeUnits})` : 'N/A'}.
+- Pharmacy Formularies: ${ctx.medicines.length} total medicines. Critical low stock: ${lowMedicines.map((m) => `${m.name} (${m.stockQuantity} left)`).join(', ') || 'None'}.
+- Emergency Protocols: ${activeCodes.length > 0 ? activeCodes.map((c) => `${c.type} at ${c.location}`).join(', ') : 'All clear / Standby'}.
+
+INSTRUCTIONS:
+1. Provide comprehensive, accurate, and professional answers to ANY questions the user asks — including clinical diagnostics, pharmacology, medical conditions, operational decisions, or general medical science.
+2. If the user asks about this hospital (patients, beds, staff, blood bank, stock), cite the exact live figures above.
+3. If the user asks general medical, health, scientific, or everyday questions, answer with evidence-based clinical accuracy.
+4. Format using clean Markdown with bold headers and bullet points.`;
+
+  // 2. Try User-Configured Gemini API (Google AI Studio Key)
+  if (config.provider === 'gemini' && config.apiKey?.trim()) {
+    try {
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${config.apiKey.trim()}`;
+      const contents = [
+        {
+          role: 'user',
+          parts: [{ text: `${systemPrompt}\n\nUser Question: ${query}` }]
+        }
+      ];
+
+      const resp = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents })
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          return {
+            id,
+            sender: 'assistant',
+            text: text.trim(),
+            timestamp,
+            badges: ['⚡ Gemini 1.5 Flash', 'Live AI Cloud', 'Key Verified']
+          };
+        }
+      }
+    } catch (e) {
+      // Fall through to other providers
+    }
+  }
+
+  // 3. Try User-Configured OpenAI API Key
+  if (config.provider === 'openai' && config.apiKey?.trim()) {
+    try {
+      const openaiUrl = 'https://api.openai.com/v1/chat/completions';
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        ...history.slice(-4),
+        { role: 'user', content: query }
+      ];
+
+      const resp = await fetch(openaiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${config.apiKey.trim()}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages,
+          max_tokens: 800
+        })
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        const text = data.choices?.[0]?.message?.content;
+        if (text) {
+          return {
+            id,
+            sender: 'assistant',
+            text: text.trim(),
+            timestamp,
+            badges: ['🤖 GPT-4o Mini', 'Live AI Cloud', 'Key Verified']
+          };
+        }
+      }
+    } catch (e) {
+      // Fall through to other providers
+    }
+  }
+
+  // 4. Try Backend Proxy / Free Cloud AI Endpoint
+  try {
+    const backendResp = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: query,
+        history,
+        provider: config.provider,
+        apiKey: config.apiKey,
+        hospitalContext: {
+          patientsCount,
+          bedsCount,
+          doctorsCount: ctx.doctors.length,
+          bloodUnits: totalBloodUnits,
+          medicinesCount: ctx.medicines.length
+        }
+      })
+    });
+
+    if (backendResp.ok) {
+      const data = await backendResp.json();
+      if (data.text) {
+        return {
+          id,
+          sender: 'assistant',
+          text: data.text,
+          timestamp,
+          badges: [
+            data.source === 'gemini'
+              ? '⚡ Gemini 1.5 Flash'
+              : data.source === 'openai'
+              ? '🤖 GPT-4o Mini'
+              : '🌟 Free Cloud AI',
+            'Real-Time Intelligence'
+          ]
+        };
+      }
+    }
+  } catch (e) {
+    // Backend fetch failed; try direct browser call below
+  }
+
+  // 5. Direct Browser Free Cloud LLM Call (Pollinations Public AI Gateway)
+  try {
+    const pollinationsUrl = 'https://text.pollinations.ai/';
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...history.slice(-4),
+      { role: 'user', content: query }
+    ];
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    const resp = await fetch(pollinationsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages,
+        model: 'openai',
+        seed: Math.floor(Math.random() * 1000)
+      }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    if (resp.ok) {
+      const replyText = await resp.text();
+      if (replyText && replyText.trim().length > 0) {
+        return {
+          id,
+          sender: 'assistant',
+          text: replyText.trim(),
+          timestamp,
+          badges: ['🌟 Free Cloud AI', 'Real-Time Intelligence']
+        };
+      }
+    }
+  } catch (e) {
+    // If offline or network timeout, fall through to deterministic clinical engine
+  }
+
+  // 6. Deterministic Local Clinical Rules Engine Fallback
+  return answerHospitalQuery(query, ctx);
+}
